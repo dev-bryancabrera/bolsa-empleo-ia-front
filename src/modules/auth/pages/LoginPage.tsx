@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router"
+import { useNavigate } from "react-router-dom"
 
 import { cn } from "@/lib/utils"
 
@@ -6,114 +6,253 @@ import { Button } from "@/core/components/ui/button"
 import { Card, CardContent } from "@/core/components/ui/card"
 import { Input } from "@/core/components/ui/input"
 import { Label } from "@/core/components/ui/label"
-import logoCarfaith from "../../../assets/logo-carfaith.png";
+import logoBolsaEmpleo from "@/assets/logo_aprendizaje_ia.png";
+import { Link } from 'react-router-dom';
 import React, { useState } from "react"
-import { Login } from "../services/AuthService"
+import { useAuthStore } from "../services/AuthService"
 import axios from "axios"
 
 export function LoginPage({ className, ...props }: React.ComponentProps<"div">) {
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLoading, setisLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>('');
 
+    const login = useAuthStore((state) => state.login);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setisLoading(true);
+        setIsLoading(true);
         setError(null);
 
         try {
-            const response = await Login(email, password);
-            if (response && response.data) {
-                if (response.data.message === 'Login exitoso') {
-                    navigate('/dashboard');
-                } else if (response.data.error) {
-                    setError(response.data.error)
-                }
-            }
+            // El store se encarga de llamar a la API y guardar el token
+            await login(email, password);
+
+            // Si llega aquí, es que el login fue exitoso
+            navigate('/dashboard');
+
         } catch (error: unknown) {
+            console.error("Error en login:", error);
+
             if (axios.isAxiosError(error) && error.response) {
+                // Mensaje específico basado en lo que envía tu Backend
+                const mensajeBackend = error.response.data?.error || error.response.data?.message;
+
                 if (error.response.status === 401) {
-                    setError('Correo o contraseña incorrectos');
+                    setError(mensajeBackend || 'Correo o contraseña incorrectos');
                 } else {
-                    setError('Error al iniciar sesión. Inténtalo de nuevo.');
+                    setError('Ocurrió un error en el servidor. Inténtalo más tarde.');
                 }
             } else {
-                const errorMessage = error instanceof Error ? error.message : 'Error al iniciar sesión. Inténtalo de nuevo.';
-                setError(errorMessage);
+                setError('No se pudo conectar con el servidor.');
             }
-            console.error("Error en login:", error);
         } finally {
-            setisLoading(false);
+            setIsLoading(false);
         }
-
-    }
+    };
 
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
-            <Card className="overflow-hidden p-0">
+            <Card className="overflow-hidden border-0 shadow-2xl">
                 <CardContent className="grid p-0 md:grid-cols-2">
-                    <form className="p-6 md:p-8" onSubmit={handleSubmit}>
+                    <form className="p-8 md:p-10" onSubmit={handleSubmit}>
                         <div className="flex flex-col gap-6">
-                            <div className="flex flex-col items-center text-center">
-                                <h1 className="text-3xl font-semibold text-primary mb-2">¡Bienvenido de nuevo!</h1>
+                            <div className="flex flex-col items-center text-center space-y-2">
+                                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-2">
+                                    <svg
+                                        className="w-8 h-8 text-primary"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                        />
+                                    </svg>
+                                </div>
+                                <h1 className="text-3xl font-bold text-foreground">
+                                    ¡Bienvenido de nuevo!
+                                </h1>
                                 <p className="text-sm text-muted-foreground">
-                                    Por favor, inicia sesión con tus credenciales para continuar.
+                                    Continúa tu camino hacia el empleo ideal
                                 </p>
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="m@example.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="password">Password</Label>
+
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="email" className="text-sm font-medium">
+                                        Correo electrónico
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            placeholder="tu@correo.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            required
+                                            className="pl-10 h-11 transition-all focus:ring-2 focus:ring-primary/20"
+                                        />
+                                        <svg
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
+                                            />
+                                        </svg>
+                                    </div>
                                 </div>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                />
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="password" className="text-sm font-medium">
+                                            Contraseña
+                                        </Label>
+                                        <a
+                                            href="#"
+                                            className="text-xs text-primary hover:underline transition-colors"
+                                        >
+                                            ¿Olvidaste tu contraseña?
+                                        </a>
+                                    </div>
+                                    <div className="relative">
+                                        <Input
+                                            id="password"
+                                            type="password"
+                                            placeholder="••••••••"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            required
+                                            className="pl-10 h-11 transition-all focus:ring-2 focus:ring-primary/20"
+                                        />
+                                        <svg
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                                            />
+                                        </svg>
+                                    </div>
+                                </div>
                             </div>
+
                             {error && (
-                                <div className="text-red-500 text-sm">{error}</div>
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                                    <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                    <span>{error}</span>
+                                </div>
                             )}
+
                             <Button
                                 type="submit"
-                                className="w-full"
+                                className="w-full h-11 text-base font-medium shadow-lg hover:shadow-xl transition-all"
                                 disabled={isLoading}
                             >
-                                {isLoading ? 'Cargando...' : 'Login'}
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Iniciando sesión...
+                                    </span>
+                                ) : (
+                                    'Iniciar sesión'
+                                )}
                             </Button>
-                            <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
+
+                            <div className="text-center text-sm text-muted-foreground">
+                                ¿Buscas tu primera oportunidad?{' '}
+                                <Link
+                                    to="/auth/register"
+                                    replace
+                                    className="text-primary font-medium hover:underline transition-colors"
+                                >
+                                    Regístrate gratis
+                                </Link>
                             </div>
                         </div>
                     </form>
-                    <div className="relative hidden h-full bg-muted md:block">
-                        <div className="flex h-full items-center justify-center p-6">
+
+                    <div className="relative hidden bg-gradient-to-br from-primary/10 via-primary/5 to-background md:flex">
+                        <div className="flex flex-col h-full items-center justify-center p-10">
                             <img
-                                src={logoCarfaith}
-                                alt="Carfaith Logo"
-                                className="max-h-40 w-auto object-contain"
+                                src={logoBolsaEmpleo}
+                                alt="Logo"
+                                className="max-h-32 w-auto object-contain mb-8 drop-shadow-2xl"
                             />
+
+                            <div className="space-y-6 max-w-sm">
+                                <div className="text-center">
+                                    <h2 className="text-2xl font-bold text-foreground mb-3">
+                                        Tu carrera profesional comienza aquí
+                                    </h2>
+                                    <p className="text-muted-foreground text-sm">
+                                        Recibe recomendaciones de aprendizaje impulsadas por IA
+                                    </p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="flex items-start gap-3 text-left">
+                                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                            <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-foreground text-sm mb-1">
+                                                Sugerencias personalizadas
+                                            </h3>
+                                            <p className="text-xs text-muted-foreground">
+                                                IA que aprende de tu perfil para recomendarte los mejores empleos
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-start gap-3 text-left">
+                                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                            <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-foreground text-sm mb-1">
+                                                Rutas de aprendizaje
+                                            </h3>
+                                            <p className="text-xs text-muted-foreground">
+                                                Desarrolla las habilidades que las empresas buscan
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Decorative elements */}
+                        <div className="absolute top-10 right-10 w-20 h-20 bg-primary/10 rounded-full blur-2xl"></div>
+                        <div className="absolute bottom-10 left-10 w-32 h-32 bg-primary/5 rounded-full blur-3xl"></div>
                     </div>
                 </CardContent>
             </Card>
-            <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:text-primary">
-                By clicking continue, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.
-            </div>
         </div>
     )
 }
