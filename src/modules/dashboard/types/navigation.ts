@@ -3,7 +3,8 @@ import {
     UserCircle,
     FileText,
     ShieldCheck,
-    MessageSquare,
+    Brain,
+    Settings2,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -22,31 +23,25 @@ export const menuItems: MenuItem[] = [
         active: true
     },
     {
-        icon: MessageSquare,
-        label: "Chat IA",
-        href: "/dashboard/chat"
+        icon: Brain,
+        label: "Mentor IA",
+        href: "chat"
     },
     {
         icon: UserCircle,
         label: "Mi Perfil",
-        href: "/dashboard/perfil"
+        href: "perfil"
     },
     {
         icon: FileText,
         label: "Mi Currículum",
-        href: "/dashboard/cv"
+        href: "cv"
     },
-    /* {
-        icon: Wrench,
-        label: "Habilidades",
-        href: "/dashboard/habilidades"
-    }, */
-    // Estas rutas suelen ser para el rol 'admin'
-    /* {
-        icon: UserCog,
-        label: "Gestión Personas",
-        href: "/dashboard/personas"
-    }, */
+    {
+        icon: Settings2,
+        label: "Configuración IA",
+        href: "configuracion-ia"
+    },
     {
         icon: ShieldCheck,
         label: "Usuarios Sistema",

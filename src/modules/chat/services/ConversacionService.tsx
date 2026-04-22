@@ -1,11 +1,13 @@
 import bolsaEmpleoIA from '@/core/api/bolsaEmpleoIA';
 
 export const ConversacionService = {
-    enviarMensaje: async (chat_id: number, persona_id: number, mensaje: string) => {
+    enviarMensaje: async (chat_id: number, persona_id: number, mensaje: string, metadata?: any, modo?: string | null) => {
         const { data } = await bolsaEmpleoIA.post('/conversacion', {
             chat_id,
             persona_id,
-            mensaje
+            mensaje,
+            metadata,
+            ...(modo ? { modo } : {}),
         });
         return data;
     },
