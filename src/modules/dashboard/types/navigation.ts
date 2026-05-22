@@ -5,6 +5,7 @@ import {
     ShieldCheck,
     Brain,
     Settings2,
+    Globe,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -36,6 +37,11 @@ export const menuItems: MenuItem[] = [
         icon: FileText,
         label: "Mi Currículum",
         href: "cv"
+    },
+    {
+        icon: Globe,
+        label: "Mi Portafolio",
+        href: "portfolio"
     },
     {
         icon: Settings2,

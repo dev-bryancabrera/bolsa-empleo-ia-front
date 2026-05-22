@@ -11,6 +11,8 @@ import { DashboardHomePage } from "@/modules/dashboard/page/DashboardHomePage";
 import { RegisterPage } from "@/modules/users/pages/RegisterPage";
 import { UserInfoPage } from "@/modules/users/pages/UserInfoPage";
 import { ConfiguracionIAPage } from "@/modules/settings/pages/ConfiguracionIAPage";
+import { PortfolioEditorPage } from "@/modules/portfolio/pages/PortfolioEditorPage";
+import { PortfolioPublicPage } from "@/modules/portfolio/pages/PortfolioPublicPage";
 import { lazy, Suspense, useEffect, useState } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
@@ -60,7 +62,11 @@ export const AppRouter = () => {
                     <Route path="chat" element={<ChatIAPage />} />
                     <Route path="perfil" element={<UserInfoPage />} />
                     <Route path="configuracion-ia" element={<ConfiguracionIAPage />} />
+                    <Route path="portfolio" element={<PortfolioEditorPage />} />
                 </Route>
+
+                {/* Portafolio público — sin auth */}
+                <Route path="/p/:slug" element={<PortfolioPublicPage />} />
 
                 {/* Redirecciones */}
                 <Route path="/" element={<Navigate to="/auth/login" replace />} />

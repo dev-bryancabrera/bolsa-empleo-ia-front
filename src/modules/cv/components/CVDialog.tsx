@@ -258,7 +258,7 @@ export const CVDialog = ({
 
             // Delete removed items across all sections in parallel
             await Promise.all([
-                ...habilidadesEliminadas.map(id => HabilidadService.eliminarHabilidad(id)),
+                ...habilidadesEliminadas.map(id => HabilidadService.eliminarHabilidad(id).catch(() => {})),
                 ...experienciasEliminadas.map(id => ExperienciaService.eliminar(id).catch(() => {})),
                 ...educacionesEliminadas.map(id => EducacionService.eliminar(id).catch(() => {})),
                 ...idiomasEliminados.map(id => IdiomaService.eliminar(id).catch(() => {})),
@@ -499,7 +499,7 @@ export const CVDialog = ({
 
                         {/* TAB 1: INFORMACIÓN GENERAL + CONTACTO */}
                         <TabsContent value="informacion" className="mt-0 space-y-5">
-                            <form id="cv-form" onSubmit={handleSubmit(onSubmitCV)}>
+                            <form id="cv-form" onSubmit={handleSubmit(onSubmitCV, () => { setActiveTab('informacion'); toast.error('Hay errores en la pestaña "Info". Revísalos antes de guardar.'); })}>
                                 {/* Título Profesional */}
                                 <Card className="border-2 border-blue-100 bg-gradient-to-br from-blue-50/50 via-white to-blue-50/30 hover:shadow-md transition-shadow">
                                     <CardContent className="pt-6">

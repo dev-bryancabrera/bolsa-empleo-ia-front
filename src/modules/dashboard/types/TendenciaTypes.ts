@@ -43,6 +43,7 @@ export interface Recomendacion {
     brecha_que_cierra?: string;
     icon: string;
     accion: string;
+    plataforma?: 'Udemy' | 'Coursera' | 'Platzi' | 'YouTube' | 'LinkedIn_Learning';
     url?: string;
 }
 

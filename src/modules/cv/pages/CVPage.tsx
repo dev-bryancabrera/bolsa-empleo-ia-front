@@ -18,6 +18,7 @@ import {
     Plus, Edit2, Trash2, Briefcase, GraduationCap, Award, Target, TrendingUp,
     FileCheck, Link2, Upload, Phone, MapPin, Globe, Linkedin, Github,
     Calendar, Languages, BadgeCheck, Clock, Building2, Printer,
+    CheckCircle2, Circle, ChevronRight, Sparkles,
 } from 'lucide-react';
 import { useAuthStore } from '@/modules/auth/services/AuthService';
 import { CVService } from '@/modules/cv/services/CVService';
@@ -27,6 +28,8 @@ import { CVValidarTab } from '../components/CVValidarTab';
 import { CVCompatibilidadTab } from '../components/CVCompatibilidadTab';
 import { CVSubirTab } from '../components/CVSubirTab';
 import { printCV } from '../components/CVPrintTemplate';
+import { CVOptimizarModal } from '../components/CVOptimizarModal';
+import type { OptimizacionResultado } from '../components/CVOptimizarModal';
 import {
     ExperienciaService,
     EducacionService,
@@ -34,6 +37,324 @@ import {
     CertificacionService,
 } from '../services/CVSectionService';
 import type { ExperienciaLaboral, Educacion, Idioma, Certificacion } from '../types/CVType';
+
+// ── Isolated dialog components (own local state → no CVPage re-render on keypress) ──
+
+interface ExperienciaDialogProps {
+    open: boolean;
+    onOpenChange: (o: boolean) => void;
+    cvId: number;
+    initial?: ExperienciaLaboral | null;
+    onSaved: () => void;
+}
+const ExperienciaDialog = ({ open, onOpenChange, cvId, initial, onSaved }: ExperienciaDialogProps) => {
+    const blank = { id_cv: cvId, empresa: '', cargo: '', descripcion: '', fecha_inicio: '', fecha_fin: '', es_trabajo_actual: false };
+    const [form, setForm] = useState<Omit<ExperienciaLaboral, 'id'>>(blank);
+
+    useEffect(() => {
+        setForm(initial ? { ...initial, id_cv: initial.id_cv ?? cvId } : { ...blank, id_cv: cvId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const handleSave = async () => {
+        if (!form.empresa || !form.cargo || !form.fecha_inicio) { toast.error('Empresa, cargo y fecha de inicio son requeridos'); return; }
+        try {
+            if (initial?.id) {
+                await ExperienciaService.actualizar(initial.id, { ...form, id_cv: cvId });
+                toast.success('Experiencia actualizada');
+            } else {
+                await ExperienciaService.crear({ ...form, id_cv: cvId });
+                toast.success('Experiencia agregada');
+            }
+            onSaved();
+            onOpenChange(false);
+        } catch { toast.error('Error al guardar la experiencia'); }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Briefcase className="h-5 w-5 text-green-600" />
+                        {initial ? 'Editar Experiencia' : 'Nueva Experiencia Laboral'}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <Label>Empresa <span className="text-red-500">*</span></Label>
+                            <Input placeholder="ej. Google" value={form.empresa} onChange={(e) => setForm(f => ({ ...f, empresa: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Cargo <span className="text-red-500">*</span></Label>
+                            <Input placeholder="ej. Desarrollador Senior" value={form.cargo} onChange={(e) => setForm(f => ({ ...f, cargo: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Fecha inicio <span className="text-red-500">*</span></Label>
+                            <Input type="month" value={form.fecha_inicio} onChange={(e) => setForm(f => ({ ...f, fecha_inicio: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Fecha fin</Label>
+                            <Input type="month" value={form.fecha_fin ?? ''} disabled={form.es_trabajo_actual} onChange={(e) => setForm(f => ({ ...f, fecha_fin: e.target.value }))} />
+                        </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" className="h-4 w-4 accent-primary" checked={form.es_trabajo_actual}
+                            onChange={(e) => setForm(f => ({ ...f, es_trabajo_actual: e.target.checked, fecha_fin: e.target.checked ? '' : f.fecha_fin }))} />
+                        Trabajo actual
+                    </label>
+                    <div className="space-y-1.5">
+                        <Label>Descripción</Label>
+                        <textarea rows={3} placeholder="Describe tus responsabilidades y logros..."
+                            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            value={form.descripcion} onChange={(e) => setForm(f => ({ ...f, descripcion: e.target.value }))} />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={handleSave} className="bg-green-600 hover:bg-green-700 text-white gap-2">
+                        {initial ? <><Edit2 className="h-4 w-4" />Actualizar</> : <><Plus className="h-4 w-4" />Guardar</>}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+interface EducacionDialogProps {
+    open: boolean;
+    onOpenChange: (o: boolean) => void;
+    cvId: number;
+    initial?: Educacion | null;
+    onSaved: () => void;
+}
+const EducacionDialog = ({ open, onOpenChange, cvId, initial, onSaved }: EducacionDialogProps) => {
+    const blank = { id_cv: cvId, institucion: '', titulo: '', nivel: '', fecha_inicio: '', fecha_fin: '', en_curso: false, descripcion: '' };
+    const [form, setForm] = useState<Omit<Educacion, 'id'>>(blank);
+
+    useEffect(() => {
+        setForm(initial ? { ...initial, id_cv: initial.id_cv ?? cvId } : { ...blank, id_cv: cvId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const handleSave = async () => {
+        if (!form.institucion || !form.titulo || !form.nivel || !form.fecha_inicio) { toast.error('Institución, título, nivel y fecha de inicio son requeridos'); return; }
+        try {
+            if (initial?.id) {
+                await EducacionService.actualizar(initial.id, { ...form, id_cv: cvId });
+                toast.success('Educación actualizada');
+            } else {
+                await EducacionService.crear({ ...form, id_cv: cvId });
+                toast.success('Educación agregada');
+            }
+            onSaved();
+            onOpenChange(false);
+        } catch { toast.error('Error al guardar la educación'); }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <GraduationCap className="h-5 w-5 text-purple-600" />
+                        {initial ? 'Editar Educación' : 'Nueva Educación'}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <Label>Institución <span className="text-red-500">*</span></Label>
+                            <Input placeholder="ej. Universidad Nacional" value={form.institucion} onChange={(e) => setForm(f => ({ ...f, institucion: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Título <span className="text-red-500">*</span></Label>
+                            <Input placeholder="ej. Ingeniería en Sistemas" value={form.titulo} onChange={(e) => setForm(f => ({ ...f, titulo: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Nivel <span className="text-red-500">*</span></Label>
+                            <Select value={form.nivel || 'none'} onValueChange={(v) => { if (v !== 'none') setForm(f => ({ ...f, nivel: v })); }}>
+                                <SelectTrigger><SelectValue placeholder="Selecciona el nivel" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none" disabled>Selecciona nivel</SelectItem>
+                                    {['Bachillerato','Técnico','Tecnólogo','Licenciatura','Ingeniería','Maestría','Doctorado','Otro'].map(n => (
+                                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Fecha inicio <span className="text-red-500">*</span></Label>
+                            <Input type="month" value={form.fecha_inicio} onChange={(e) => setForm(f => ({ ...f, fecha_inicio: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Fecha fin</Label>
+                            <Input type="month" value={form.fecha_fin ?? ''} disabled={form.en_curso} onChange={(e) => setForm(f => ({ ...f, fecha_fin: e.target.value }))} />
+                        </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" className="h-4 w-4 accent-primary" checked={form.en_curso}
+                            onChange={(e) => setForm(f => ({ ...f, en_curso: e.target.checked, fecha_fin: e.target.checked ? '' : f.fecha_fin }))} />
+                        En curso
+                    </label>
+                    <div className="space-y-1.5">
+                        <Label>Descripción</Label>
+                        <textarea rows={2} placeholder="Descripción opcional..."
+                            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            value={form.descripcion ?? ''} onChange={(e) => setForm(f => ({ ...f, descripcion: e.target.value }))} />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={handleSave} className="bg-purple-600 hover:bg-purple-700 text-white gap-2">
+                        {initial ? <><Edit2 className="h-4 w-4" />Actualizar</> : <><Plus className="h-4 w-4" />Guardar</>}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+interface CertificacionDialogProps {
+    open: boolean;
+    onOpenChange: (o: boolean) => void;
+    cvId: number;
+    initial?: Certificacion | null;
+    onSaved: () => void;
+}
+const CertificacionDialog = ({ open, onOpenChange, cvId, initial, onSaved }: CertificacionDialogProps) => {
+    const blank = { id_cv: cvId, nombre: '', emisor: '', fecha: '', url_credencial: '' };
+    const [form, setForm] = useState<Omit<Certificacion, 'id'>>(blank);
+
+    useEffect(() => {
+        setForm(initial ? { ...initial, id_cv: initial.id_cv ?? cvId } : { ...blank, id_cv: cvId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const handleSave = async () => {
+        if (!form.nombre) { toast.error('El nombre de la certificación es requerido'); return; }
+        try {
+            if (initial?.id) {
+                await CertificacionService.actualizar(initial.id, { ...form, id_cv: cvId });
+                toast.success('Certificación actualizada');
+            } else {
+                await CertificacionService.crear({ ...form, id_cv: cvId });
+                toast.success('Certificación agregada');
+            }
+            onSaved();
+            onOpenChange(false);
+        } catch { toast.error('Error al guardar la certificación'); }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <BadgeCheck className="h-5 w-5 text-yellow-600" />
+                        {initial ? 'Editar Certificación' : 'Nueva Certificación'}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                        <Label>Nombre <span className="text-red-500">*</span></Label>
+                        <Input placeholder="ej. AWS Certified Solutions Architect" value={form.nombre} onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <Label>Emisor</Label>
+                            <Input placeholder="ej. Amazon, Google, Coursera" value={form.emisor ?? ''} onChange={(e) => setForm(f => ({ ...f, emisor: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Fecha de obtención</Label>
+                            <Input type="month" value={form.fecha ?? ''} onChange={(e) => setForm(f => ({ ...f, fecha: e.target.value }))} />
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>URL de credencial</Label>
+                        <Input placeholder="https://..." value={form.url_credencial ?? ''} onChange={(e) => setForm(f => ({ ...f, url_credencial: e.target.value }))} />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={handleSave} className="bg-yellow-600 hover:bg-yellow-700 text-white gap-2">
+                        {initial ? <><Edit2 className="h-4 w-4" />Actualizar</> : <><Plus className="h-4 w-4" />Guardar</>}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+interface IdiomaDialogProps {
+    open: boolean;
+    onOpenChange: (o: boolean) => void;
+    cvId: number;
+    initial?: Idioma | null;
+    onSaved: () => void;
+}
+const IdiomaDialog = ({ open, onOpenChange, cvId, initial, onSaved }: IdiomaDialogProps) => {
+    const blank = { id_cv: cvId, nombre: '', nivel: '' };
+    const [form, setForm] = useState<Omit<Idioma, 'id'>>(blank);
+
+    useEffect(() => {
+        setForm(initial ? { ...initial, id_cv: initial.id_cv ?? cvId } : { ...blank, id_cv: cvId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const handleSave = async () => {
+        if (!form.nombre || !form.nivel) { toast.error('Nombre y nivel son requeridos'); return; }
+        try {
+            if (initial?.id) {
+                await IdiomaService.actualizar(initial.id, { ...form, id_cv: cvId });
+                toast.success('Idioma actualizado');
+            } else {
+                await IdiomaService.crear({ ...form, id_cv: cvId });
+                toast.success('Idioma agregado');
+            }
+            onSaved();
+            onOpenChange(false);
+        } catch { toast.error('Error al guardar el idioma'); }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Languages className="h-5 w-5 text-blue-600" />
+                        {initial ? 'Editar Idioma' : 'Agregar Idioma'}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                        <Label>Idioma <span className="text-red-500">*</span></Label>
+                        <Input placeholder="ej. Inglés, Francés" value={form.nombre} onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Nivel <span className="text-red-500">*</span></Label>
+                        <Select value={form.nivel || 'none'} onValueChange={(v) => { if (v !== 'none') setForm(f => ({ ...f, nivel: v })); }}>
+                            <SelectTrigger><SelectValue placeholder="Selecciona el nivel" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none" disabled>Selecciona nivel</SelectItem>
+                                {['Básico','Intermedio','Avanzado','Nativo'].map(n => (
+                                    <SelectItem key={n} value={n}>{n}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+                        {initial ? <><Edit2 className="h-4 w-4" />Actualizar</> : <><Plus className="h-4 w-4" />Guardar</>}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
 
 export const CVPage = () => {
     const authUser = useAuthStore((state) => state.user);
@@ -48,6 +369,28 @@ export const CVPage = () => {
     const [educaciones, setEducaciones] = useState<Educacion[]>([]);
     const [idiomas, setIdiomas] = useState<Idioma[]>([]);
     const [certificaciones, setCertificaciones] = useState<Certificacion[]>([]);
+
+    // Optimización IA
+    const [isOptimizing, setIsOptimizing] = useState(false);
+    const [isApplyingOptimization, setIsApplyingOptimization] = useState(false);
+    const [optimizarModalOpen, setOptimizarModalOpen] = useState(false);
+    const [optimizacionResultado, setOptimizacionResultado] = useState<OptimizacionResultado | null>(null);
+
+    // Section dialogs — Experiencia
+    const [isAddingExperiencia, setIsAddingExperiencia] = useState(false);
+    const [currentExperiencia, setCurrentExperiencia] = useState<ExperienciaLaboral | null>(null);
+
+    // Section dialogs — Educación
+    const [isAddingEducacion, setIsAddingEducacion] = useState(false);
+    const [currentEducacion, setCurrentEducacion] = useState<Educacion | null>(null);
+
+    // Section dialogs — Idioma
+    const [isAddingIdioma, setIsAddingIdioma] = useState(false);
+    const [currentIdioma, setCurrentIdioma] = useState<Idioma | null>(null);
+
+    // Section dialogs — Certificación
+    const [isAddingCertificacion, setIsAddingCertificacion] = useState(false);
+    const [currentCertificacion, setCurrentCertificacion] = useState<Certificacion | null>(null);
 
     // Estados del formulario Habilidad
     const [formHabilidad, setFormHabilidad] = useState({
@@ -103,8 +446,40 @@ export const CVPage = () => {
     };
 
     const handleSaveCV = async () => {
-        fetchCVData();
+        await fetchCVData();
         setIsModalOpen(false);
+    };
+
+    const handleOptimizarCV = async () => {
+        if (!cvData?.id) return;
+        setOptimizacionResultado(null);
+        setIsOptimizing(true);
+        setOptimizarModalOpen(true);
+        try {
+            const resultado = await CVService.optimizarCV(cvData.id);
+            setOptimizacionResultado(resultado);
+        } catch {
+            toast.error('Error al optimizar el CV. Intenta nuevamente.');
+            setOptimizarModalOpen(false);
+        } finally {
+            setIsOptimizing(false);
+        }
+    };
+
+    const handleAplicarOptimizacion = async () => {
+        if (!cvData?.id || !optimizacionResultado?.campos_mejorados) return;
+        setIsApplyingOptimization(true);
+        try {
+            await CVService.actualizarCV(cvData.id, optimizacionResultado.campos_mejorados);
+            await fetchCVData();
+            setOptimizarModalOpen(false);
+            setOptimizacionResultado(null);
+            toast.success('¡CV optimizado exitosamente!');
+        } catch {
+            toast.error('Error al aplicar las mejoras. Intenta nuevamente.');
+        } finally {
+            setIsApplyingOptimization(false);
+        }
     };
 
     const handleSaveHabilidad = async () => {
@@ -160,6 +535,38 @@ export const CVPage = () => {
         }
     };
 
+    const handleDeleteExperiencia = async (id: number) => {
+        try {
+            await ExperienciaService.eliminar(id);
+            toast.success('Experiencia eliminada');
+            await fetchCVData();
+        } catch { toast.error('Error al eliminar la experiencia'); }
+    };
+
+    const handleDeleteEducacion = async (id: number) => {
+        try {
+            await EducacionService.eliminar(id);
+            toast.success('Educación eliminada');
+            await fetchCVData();
+        } catch { toast.error('Error al eliminar la educación'); }
+    };
+
+    const handleDeleteIdioma = async (id: number) => {
+        try {
+            await IdiomaService.eliminar(id);
+            toast.success('Idioma eliminado');
+            await fetchCVData();
+        } catch { toast.error('Error al eliminar el idioma'); }
+    };
+
+    const handleDeleteCertificacion = async (id: number) => {
+        try {
+            await CertificacionService.eliminar(id);
+            toast.success('Certificación eliminada');
+            await fetchCVData();
+        } catch { toast.error('Error al eliminar la certificación'); }
+    };
+
     const getNivelColor = (nivel: string) => {
         const colores: Record<string, string> = {
             'Básico': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
@@ -179,6 +586,85 @@ export const CVPage = () => {
         };
         return colores[nivel] || 'bg-muted text-muted-foreground border-border';
     };
+
+    // ── CV Completeness ──────────────────────────────────────────────────────
+    const completitudSecciones = cvData ? [
+        {
+            id: 'perfil',
+            label: 'Perfil básico',
+            desc: 'Título, resumen profesional',
+            peso: 20,
+            completo: !!(cvData.titulo_profesional && cvData.resumen_profesional),
+            accion: () => setIsModalOpen(true),
+        },
+        {
+            id: 'contacto',
+            label: 'Contacto',
+            desc: 'Teléfono o ubicación',
+            peso: 10,
+            completo: !!(cvData.telefono || cvData.ciudad),
+            accion: () => setIsModalOpen(true),
+        },
+        {
+            id: 'experiencia',
+            label: 'Experiencia laboral',
+            desc: 'Al menos 1 entrada',
+            peso: 25,
+            completo: experiencias.length > 0,
+            accion: () => {
+                document.getElementById('cv-section-experiencia')?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => { setCurrentExperiencia(null); setIsAddingExperiencia(true); }, 400);
+            },
+        },
+        {
+            id: 'educacion',
+            label: 'Educación',
+            desc: 'Al menos 1 entrada',
+            peso: 20,
+            completo: educaciones.length > 0,
+            accion: () => {
+                document.getElementById('cv-section-educacion')?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => { setCurrentEducacion(null); setIsAddingEducacion(true); }, 400);
+            },
+        },
+        {
+            id: 'habilidades',
+            label: 'Habilidades',
+            desc: 'Al menos 3 habilidades',
+            peso: 15,
+            completo: habilidades.length >= 3,
+            accion: () => {
+                document.getElementById('cv-section-habilidades')?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => { setCurrentHabilidad(null); setFormHabilidad({ nombre: '', categoria: '', nivel: '', anios_experiencia: 0 }); setIsEditingHabilidad(true); }, 400);
+            },
+        },
+        {
+            id: 'idiomas',
+            label: 'Idiomas',
+            desc: 'Al menos 1 idioma',
+            peso: 10,
+            completo: idiomas.length > 0,
+            accion: () => {
+                document.getElementById('cv-section-idiomas')?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => { setCurrentIdioma(null); setIsAddingIdioma(true); }, 400);
+            },
+        },
+    ] : [];
+
+    const porcentajeCompleto = completitudSecciones.reduce((acc, s) => acc + (s.completo ? s.peso : 0), 0);
+    const proximaSeccion = completitudSecciones.find(s => !s.completo);
+
+    const colorBarra = porcentajeCompleto >= 80
+        ? 'bg-green-500'
+        : porcentajeCompleto >= 50
+        ? 'bg-yellow-500'
+        : 'bg-red-500';
+
+    const colorTexto = porcentajeCompleto >= 80
+        ? 'text-green-600'
+        : porcentajeCompleto >= 50
+        ? 'text-yellow-600'
+        : 'text-red-600';
 
     return (
         <div className="container mx-auto p-6 max-w-7xl">
@@ -217,12 +703,12 @@ export const CVPage = () => {
                     <div className="flex items-center justify-between mb-2">
                         <div />
                         {cvData ? (
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                                 <Button
                                     variant="outline"
                                     onClick={() => printCV({
                                         cvData,
-                                        userName: authUser?.nombre ?? authUser?.name ?? '',
+                                        userName: authUser?.google_nombre ?? authUser?.email ?? '',
                                         userEmail: authUser?.email ?? '',
                                         habilidades,
                                         experiencias,
@@ -230,13 +716,21 @@ export const CVPage = () => {
                                         idiomas,
                                         certificaciones,
                                     })}
-                                    className="gap-2"
+                                    className="gap-2 hover:bg-primary hover:text-white transition-all"
                                 >
                                     <Printer className="h-4 w-4" />
                                     Imprimir CV
                                 </Button>
                                 <Button onClick={() => setIsModalOpen(true)} className="gap-2 bg-yellow-500 hover:bg-yellow-600">
                                     ✏️ Editar CV
+                                </Button>
+                                <Button
+                                    onClick={handleOptimizarCV}
+                                    disabled={isOptimizing}
+                                    className="gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white shadow-md"
+                                >
+                                    <Sparkles className="h-4 w-4" />
+                                    Optimizar CV con IA
                                 </Button>
                             </div>
                         ) : null}
@@ -300,6 +794,74 @@ export const CVPage = () => {
                                     </CardContent>
                                 </Card>
                             </div>
+
+                            {/* ── Completitud del CV ── */}
+                            <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-slate-50 to-card dark:from-slate-950/30">
+                                <CardContent className="pt-5 pb-5">
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                        {/* Circle indicator */}
+                                        <div className="relative w-20 h-20 shrink-0 mx-auto sm:mx-0">
+                                            <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                                                <circle
+                                                    cx="40" cy="40" r="32" fill="none"
+                                                    stroke={porcentajeCompleto >= 80 ? '#22c55e' : porcentajeCompleto >= 50 ? '#eab308' : '#ef4444'}
+                                                    strokeWidth="8"
+                                                    strokeDasharray={`${(porcentajeCompleto / 100) * 201} 201`}
+                                                    strokeLinecap="round"
+                                                />
+                                            </svg>
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                <span className={`text-lg font-bold leading-none ${colorTexto}`}>{porcentajeCompleto}%</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Sections list */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                                                <div>
+                                                    <p className="font-bold text-foreground text-sm">Completitud del CV</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {porcentajeCompleto === 100
+                                                            ? '¡Tu CV está completo!'
+                                                            : `Faltan ${completitudSecciones.filter(s => !s.completo).length} sección${completitudSecciones.filter(s => !s.completo).length !== 1 ? 'es' : ''} por completar`
+                                                        }
+                                                    </p>
+                                                </div>
+                                                {proximaSeccion && (
+                                                    <button
+                                                        onClick={proximaSeccion.accion}
+                                                        className="flex items-center gap-1 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-full transition-colors"
+                                                    >
+                                                        Completar: {proximaSeccion.label}
+                                                        <ChevronRight className="h-3 w-3" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="w-full bg-muted rounded-full h-1.5 mb-3">
+                                                <div className={`h-1.5 rounded-full transition-all duration-500 ${colorBarra}`} style={{ width: `${porcentajeCompleto}%` }} />
+                                            </div>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                                {completitudSecciones.map(s => (
+                                                    <button
+                                                        key={s.id}
+                                                        onClick={s.accion}
+                                                        className="flex items-center gap-1.5 text-xs hover:text-primary transition-colors"
+                                                    >
+                                                        {s.completo
+                                                            ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                                                            : <Circle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                                                        }
+                                                        <span className={s.completo ? 'text-muted-foreground line-through' : 'text-foreground font-medium'}>
+                                                            {s.label}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
 
                             {/* Perfil Profesional */}
                             <Card className="border-0 shadow-lg mb-6 bg-card">
@@ -375,16 +937,22 @@ export const CVPage = () => {
                             )}
 
                             {/* Experiencia Laboral */}
-                            {experiencias.length > 0 && (
-                                <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-green-50 to-card dark:from-green-950/30">
-                                    <CardHeader>
+                            <Card id="cv-section-experiencia" className="border-0 shadow-lg mb-6 bg-gradient-to-br from-green-50 to-card dark:from-green-950/30">
+                                <CardHeader>
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
                                         <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                                             <Briefcase className="h-5 w-5 text-green-600" />
                                             Experiencia Laboral
-                                            <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-sm font-semibold">{experiencias.length}</span>
+                                            {experiencias.length > 0 && <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-sm font-semibold">{experiencias.length}</span>}
                                         </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
+                                        <Button size="sm" className="gap-1 bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                                            onClick={() => { setCurrentExperiencia(null); setIsAddingExperiencia(true); }}>
+                                            <Plus className="h-4 w-4" /> Agregar
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {experiencias.length > 0 ? (
                                         <div className="space-y-4">
                                             {experiencias.map((exp) => (
                                                 <div key={exp.id} className="relative pl-6 pb-4 last:pb-0 border-l-2 border-green-200">
@@ -403,6 +971,14 @@ export const CVPage = () => {
                                                                     <Calendar className="h-3 w-3" />
                                                                     {exp.fecha_inicio} — {exp.es_trabajo_actual ? 'Presente' : (exp.fecha_fin || '')}
                                                                 </span>
+                                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                                                    onClick={() => { setCurrentExperiencia(exp); setIsAddingExperiencia(true); }}>
+                                                                    <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                                                                </Button>
+                                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                                                    onClick={() => handleDeleteExperiencia(exp.id!)}>
+                                                                    <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                                                </Button>
                                                             </div>
                                                         </div>
                                                         {exp.descripcion && <p className="text-sm text-muted-foreground mt-2">{exp.descripcion}</p>}
@@ -410,21 +986,40 @@ export const CVPage = () => {
                                                 </div>
                                             ))}
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    ) : (
+                                        <Card className="border-2 border-dashed border-border bg-muted/20">
+                                            <CardContent className="py-10 text-center">
+                                                <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <Briefcase className="h-7 w-7 text-muted-foreground/40" />
+                                                </div>
+                                                <p className="text-foreground font-medium mb-1">Sin experiencia laboral</p>
+                                                <p className="text-muted-foreground text-sm mb-4">Agrega tu primera experiencia para fortalecer tu perfil</p>
+                                                <Button onClick={() => { setCurrentExperiencia(null); setIsAddingExperiencia(true); }} className="bg-green-600 hover:bg-green-700 text-white">
+                                                    <Plus className="w-4 h-4 mr-2" /> Agregar Experiencia
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </CardContent>
+                            </Card>
 
                             {/* Educación */}
-                            {educaciones.length > 0 && (
-                                <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-purple-50 to-card dark:from-purple-950/30">
-                                    <CardHeader>
+                            <Card id="cv-section-educacion" className="border-0 shadow-lg mb-6 bg-gradient-to-br from-purple-50 to-card dark:from-purple-950/30">
+                                <CardHeader>
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
                                         <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                                             <GraduationCap className="h-5 w-5 text-purple-600" />
                                             Educación
-                                            <span className="ml-2 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-sm font-semibold">{educaciones.length}</span>
+                                            {educaciones.length > 0 && <span className="ml-2 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-sm font-semibold">{educaciones.length}</span>}
                                         </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
+                                        <Button size="sm" className="gap-1 bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+                                            onClick={() => { setCurrentEducacion(null); setIsAddingEducacion(true); }}>
+                                            <Plus className="h-4 w-4" /> Agregar
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {educaciones.length > 0 ? (
                                         <div className="space-y-4">
                                             {educaciones.map((edu) => (
                                                 <div key={edu.id} className="relative pl-6 pb-4 last:pb-0 border-l-2 border-purple-200">
@@ -442,6 +1037,14 @@ export const CVPage = () => {
                                                                     <Calendar className="h-3 w-3" />
                                                                     {edu.fecha_inicio} — {edu.en_curso ? 'Presente' : (edu.fecha_fin || '')}
                                                                 </span>
+                                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                                                    onClick={() => { setCurrentEducacion(edu); setIsAddingEducacion(true); }}>
+                                                                    <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                                                                </Button>
+                                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                                                    onClick={() => handleDeleteEducacion(edu.id!)}>
+                                                                    <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                                                </Button>
                                                             </div>
                                                         </div>
                                                         {edu.descripcion && <p className="text-sm text-muted-foreground mt-2">{edu.descripcion}</p>}
@@ -449,45 +1052,91 @@ export const CVPage = () => {
                                                 </div>
                                             ))}
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    ) : (
+                                        <Card className="border-2 border-dashed border-border bg-muted/20">
+                                            <CardContent className="py-10 text-center">
+                                                <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <GraduationCap className="h-7 w-7 text-muted-foreground/40" />
+                                                </div>
+                                                <p className="text-foreground font-medium mb-1">Sin educación registrada</p>
+                                                <p className="text-muted-foreground text-sm mb-4">Agrega tu formación académica para completar tu perfil</p>
+                                                <Button onClick={() => { setCurrentEducacion(null); setIsAddingEducacion(true); }} className="bg-purple-600 hover:bg-purple-700 text-white">
+                                                    <Plus className="w-4 h-4 mr-2" /> Agregar Educación
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </CardContent>
+                            </Card>
 
                             {/* Idiomas */}
-                            {idiomas.length > 0 && (
-                                <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-blue-50 to-card dark:from-blue-950/30">
-                                    <CardHeader>
+                            <Card id="cv-section-idiomas" className="border-0 shadow-lg mb-6 bg-gradient-to-br from-blue-50 to-card dark:from-blue-950/30">
+                                <CardHeader>
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
                                         <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                                             <Languages className="h-5 w-5 text-blue-600" />
                                             Idiomas
-                                            <span className="ml-2 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-semibold">{idiomas.length}</span>
+                                            {idiomas.length > 0 && <span className="ml-2 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-semibold">{idiomas.length}</span>}
                                         </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
+                                        <Button size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                                            onClick={() => { setCurrentIdioma(null); setIsAddingIdioma(true); }}>
+                                            <Plus className="h-4 w-4" /> Agregar
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {idiomas.length > 0 ? (
                                         <div className="flex flex-wrap gap-3">
                                             {idiomas.map((idioma) => (
                                                 <div key={idioma.id} className={`flex items-center gap-2 px-4 py-2 rounded-full border ${getIdiomaColor(idioma.nivel)} shadow-sm`}>
                                                     <Languages className="h-4 w-4" />
                                                     <span className="font-semibold text-sm">{idioma.nombre}</span>
                                                     <span className="text-xs font-medium opacity-80">— {idioma.nivel}</span>
+                                                    <button className="ml-1 opacity-60 hover:opacity-100 transition-opacity"
+                                                        onClick={() => { setCurrentIdioma(idioma); setIsAddingIdioma(true); }}>
+                                                        <Edit2 className="h-3 w-3" />
+                                                    </button>
+                                                    <button className="opacity-60 hover:opacity-100 transition-opacity"
+                                                        onClick={() => handleDeleteIdioma(idioma.id!)}>
+                                                        <Trash2 className="h-3 w-3" />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    ) : (
+                                        <Card className="border-2 border-dashed border-border bg-muted/20">
+                                            <CardContent className="py-10 text-center">
+                                                <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <Languages className="h-7 w-7 text-muted-foreground/40" />
+                                                </div>
+                                                <p className="text-foreground font-medium mb-1">Sin idiomas registrados</p>
+                                                <p className="text-muted-foreground text-sm mb-4">Agrega los idiomas que manejas</p>
+                                                <Button onClick={() => { setCurrentIdioma(null); setIsAddingIdioma(true); }} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                                    <Plus className="w-4 h-4 mr-2" /> Agregar Idioma
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </CardContent>
+                            </Card>
 
                             {/* Certificaciones */}
-                            {certificaciones.length > 0 && (
-                                <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-yellow-50 to-card dark:from-yellow-950/30">
-                                    <CardHeader>
+                            <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-yellow-50 to-card dark:from-yellow-950/30">
+                                <CardHeader>
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
                                         <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                                             <BadgeCheck className="h-5 w-5 text-yellow-600" />
                                             Certificaciones
-                                            <span className="ml-2 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full text-sm font-semibold">{certificaciones.length}</span>
+                                            {certificaciones.length > 0 && <span className="ml-2 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full text-sm font-semibold">{certificaciones.length}</span>}
                                         </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
+                                        <Button size="sm" className="gap-1 bg-yellow-600 hover:bg-yellow-700 text-white shadow-sm"
+                                            onClick={() => { setCurrentCertificacion(null); setIsAddingCertificacion(true); }}>
+                                            <Plus className="h-4 w-4" /> Agregar
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {certificaciones.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {certificaciones.map((cert) => (
                                                 <div key={cert.id} className="bg-card rounded-lg p-4 border border-border shadow-sm hover:shadow-md transition-shadow flex items-start gap-3">
@@ -508,15 +1157,38 @@ export const CVPage = () => {
                                                             </a>
                                                         )}
                                                     </div>
+                                                    <div className="flex flex-col gap-1 shrink-0">
+                                                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                                            onClick={() => { setCurrentCertificacion(cert); setIsAddingCertificacion(true); }}>
+                                                            <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                                                        </Button>
+                                                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                                            onClick={() => handleDeleteCertificacion(cert.id!)}>
+                                                            <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    ) : (
+                                        <Card className="border-2 border-dashed border-border bg-muted/20">
+                                            <CardContent className="py-10 text-center">
+                                                <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <BadgeCheck className="h-7 w-7 text-muted-foreground/40" />
+                                                </div>
+                                                <p className="text-foreground font-medium mb-1">Sin certificaciones</p>
+                                                <p className="text-muted-foreground text-sm mb-4">Agrega tus certificados y cursos completados</p>
+                                                <Button onClick={() => { setCurrentCertificacion(null); setIsAddingCertificacion(true); }} className="bg-yellow-600 hover:bg-yellow-700 text-white">
+                                                    <Plus className="w-4 h-4 mr-2" /> Agregar Certificación
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </CardContent>
+                            </Card>
 
                             {/* Habilidades */}
-                            <Card className="border-0 shadow-lg bg-card">
+                            <Card id="cv-section-habilidades" className="border-0 shadow-lg bg-card">
                                 <CardHeader>
                                     <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div className="flex items-center gap-2">
@@ -686,12 +1358,51 @@ export const CVPage = () => {
                 </TabsContent>
             </Tabs>
 
+            <ExperienciaDialog
+                open={isAddingExperiencia}
+                onOpenChange={setIsAddingExperiencia}
+                cvId={cvData?.id ?? 0}
+                initial={currentExperiencia}
+                onSaved={fetchCVData}
+            />
+            <EducacionDialog
+                open={isAddingEducacion}
+                onOpenChange={setIsAddingEducacion}
+                cvId={cvData?.id ?? 0}
+                initial={currentEducacion}
+                onSaved={fetchCVData}
+            />
+            <IdiomaDialog
+                open={isAddingIdioma}
+                onOpenChange={setIsAddingIdioma}
+                cvId={cvData?.id ?? 0}
+                initial={currentIdioma}
+                onSaved={fetchCVData}
+            />
+
+            <CertificacionDialog
+                open={isAddingCertificacion}
+                onOpenChange={setIsAddingCertificacion}
+                cvId={cvData?.id ?? 0}
+                initial={currentCertificacion}
+                onSaved={fetchCVData}
+            />
+
             <CVDialog
                 open={isModalOpen}
                 onOpenChange={setIsModalOpen}
                 editingCV={cvData}
                 habilidadesIniciales={habilidades}
                 onSubmit={handleSaveCV}
+            />
+
+            <CVOptimizarModal
+                open={optimizarModalOpen}
+                onOpenChange={setOptimizarModalOpen}
+                isLoading={isOptimizing}
+                resultado={optimizacionResultado}
+                onAplicar={handleAplicarOptimizacion}
+                isApplying={isApplyingOptimization}
             />
         </div>
     );

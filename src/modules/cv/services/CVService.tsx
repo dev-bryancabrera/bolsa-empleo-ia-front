@@ -42,5 +42,11 @@ export const CVService = {
     eliminarCV: async (id: number) => {
         const { data } = await bolsaEmpleoIA.delete(`/cv/${id}`);
         return data;
-    }
+    },
+
+    // Optimizar CV con IA
+    optimizarCV: async (cvId: number) => {
+        const { data } = await bolsaEmpleoIA.post('/cv/optimizar', { cv_id: cvId });
+        return data;
+    },
 }

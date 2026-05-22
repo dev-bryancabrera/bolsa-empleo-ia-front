@@ -35,6 +35,15 @@ function groupBy<T>(arr: T[], key: keyof T): Record<string, T[]> {
     }, {});
 }
 
+function esc(str?: string | null): string {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 export function printCV(props: CVPrintProps) {
     const { cvData, userName, userEmail, habilidades, experiencias, educaciones, idiomas, certificaciones } = props;
 
@@ -52,405 +61,371 @@ export function printCV(props: CVPrintProps) {
         return bEnd.localeCompare(aEnd);
     });
 
-    // ── Sidebar content ──────────────────────────────────────────────
-    const contactItems: { icon: string; text: string; href?: string }[] = [];
-    if (userEmail)            contactItems.push({ icon: '✉', text: userEmail, href: `mailto:${userEmail}` });
-    if (cvData.telefono)      contactItems.push({ icon: '✆', text: cvData.telefono });
+    // ── Contact bar ──────────────────────────────────────────────────
+    const contactParts: string[] = [];
+    if (cvData.telefono)
+        contactParts.push(`<span class="ci">&#9990;&nbsp;${esc(cvData.telefono)}</span>`);
+    if (userEmail)
+        contactParts.push(`<span class="ci">&#9993;&nbsp;${esc(userEmail)}</span>`);
     if (cvData.ciudad || cvData.pais)
-        contactItems.push({ icon: '⌖', text: [cvData.ciudad, cvData.pais].filter(Boolean).join(', ') });
-    if (cvData.linkedin_url)  contactItems.push({ icon: 'in', text: cvData.linkedin_url.replace('https://',''), href: cvData.linkedin_url });
-    if (cvData.github_url)    contactItems.push({ icon: '⌁', text: cvData.github_url.replace('https://',''), href: cvData.github_url });
-    if (cvData.portfolio_url) contactItems.push({ icon: '⊹', text: cvData.portfolio_url.replace('https://',''), href: cvData.portfolio_url });
+        contactParts.push(`<span class="ci">&#9679;&nbsp;${esc([cvData.ciudad, cvData.pais].filter(Boolean).join(', '))}</span>`);
+    if (cvData.linkedin_url) {
+        const liUser = cvData.linkedin_url.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, '').replace(/\/$/, '');
+        contactParts.push(`<a href="${esc(cvData.linkedin_url)}" class="ci">in&nbsp;linkedin.com/in/${esc(liUser)}</a>`);
+    }
+    if (cvData.github_url) {
+        const ghUser = cvData.github_url.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\/$/, '');
+        contactParts.push(`<a href="${esc(cvData.github_url)}" class="ci">&#9679;&nbsp;github.com/${esc(ghUser)}</a>`);
+    }
+    if (cvData.portfolio_url)
+        contactParts.push(`<a href="${esc(cvData.portfolio_url)}" class="ci">&#9679;&nbsp;Portfolio</a>`);
 
-    const sidebarContact = contactItems.map(c =>
-        `<div class="contact-row">
-            <span class="contact-icon">${c.icon}</span>
-            ${c.href
-                ? `<a href="${c.href}" class="contact-text">${c.text}</a>`
-                : `<span class="contact-text">${c.text}</span>`
-            }
-         </div>`
-    ).join('');
+    const contactBar = contactParts.join('<span class="sep">|</span>');
 
-    const sidebarSkills = Object.entries(skillGroups).map(([cat, items]) => `
+    // ── Summary ──────────────────────────────────────────────────────
+    const summarySection = cvData.resumen_profesional ? `
+        <div class="section">
+            <div class="section-title">Perfil Profesional</div>
+            <p class="summary-text">${esc(cvData.resumen_profesional)}</p>
+        </div>` : '';
+
+    // ── Experience ───────────────────────────────────────────────────
+    const expSection = sortedExp.length === 0 ? '' : `
+        <div class="section">
+            <div class="section-title">Experiencia Profesional</div>
+            ${sortedExp.map(exp => {
+                const bullets = toBullets(exp.descripcion);
+                const dateStr = `${formatDate(exp.fecha_inicio)} – ${exp.es_trabajo_actual ? 'Presente' : formatDate(exp.fecha_fin)}`;
+                return `
+                <div class="entry">
+                    <div class="entry-header">
+                        <span class="entry-company">${esc(exp.empresa)}</span>
+                        <span class="entry-dates">${dateStr}</span>
+                    </div>
+                    <div class="entry-role">${esc(exp.cargo)}</div>
+                    ${bullets.length > 0
+                        ? `<ul class="bullet-list">${bullets.map(b => `<li>${esc(b)}</li>`).join('')}</ul>`
+                        : ''
+                    }
+                </div>`;
+            }).join('')}
+        </div>`;
+
+    // ── Education ────────────────────────────────────────────────────
+    const eduSection = sortedEdu.length === 0 ? '' : `
+        <div class="section">
+            <div class="section-title">Formación Académica</div>
+            ${sortedEdu.map(edu => {
+                const dateStr = `${formatDate(edu.fecha_inicio)} – ${edu.en_curso ? 'En curso' : formatDate(edu.fecha_fin)}`;
+                return `
+                <div class="entry">
+                    <div class="entry-header">
+                        <span class="entry-company">${esc(edu.institucion)}</span>
+                        <span class="entry-dates">${dateStr}</span>
+                    </div>
+                    <div class="entry-role">${esc(edu.titulo)}${edu.nivel ? ` · ${esc(edu.nivel)}` : ''}</div>
+                    ${edu.descripcion ? `<p class="entry-desc">${esc(edu.descripcion)}</p>` : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+
+    // ── Sidebar: Skills grouped by category ──────────────────────────
+    const sideSkills = Object.entries(skillGroups).map(([cat, items]) => `
         <div class="sidebar-section">
-            <h3 class="sidebar-section-title">${cat}</h3>
-            <div class="skill-pills">
-                ${items.map(s => `<span class="skill-pill">${s.nombre}${s.nivel && s.nivel !== 'Sin especificar' ? ` <span class="skill-level">${s.nivel}</span>` : ''}</span>`).join('')}
-            </div>
+            <div class="section-title">${esc(cat)}</div>
+            ${items.map(s => `
+                <div class="skill-item">
+                    <span class="skill-bullet"></span>
+                    <span>${esc(s.nombre)}</span>
+                </div>`).join('')}
         </div>`
     ).join('');
 
-    const sidebarLangs = idiomas.length === 0 ? '' : `
+    // ── Sidebar: Languages ───────────────────────────────────────────
+    const sideLangs = idiomas.length === 0 ? '' : `
         <div class="sidebar-section">
-            <h3 class="sidebar-section-title">Idiomas</h3>
+            <div class="section-title">Idiomas</div>
             ${idiomas.map(i => `
                 <div class="lang-row">
-                    <span class="lang-name">${i.nombre}</span>
-                    <span class="lang-level">${i.nivel}</span>
-                </div>`
-            ).join('')}
+                    <span class="lang-name">${esc(i.nombre)}</span>
+                    <span class="lang-level">${esc(i.nivel)}</span>
+                </div>`).join('')}
         </div>`;
 
-    const sidebarCerts = certificaciones.length === 0 ? '' : `
+    // ── Sidebar: Certifications ──────────────────────────────────────
+    const sideCerts = certificaciones.length === 0 ? '' : `
         <div class="sidebar-section">
-            <h3 class="sidebar-section-title">Certificaciones</h3>
-            ${certificaciones.map(cert => `
+            <div class="section-title">Certificaciones</div>
+            ${certificaciones.map(c => `
                 <div class="cert-item">
-                    <span class="cert-name">${cert.nombre}</span>
-                    ${cert.emisor ? `<span class="cert-issuer">${cert.emisor}</span>` : ''}
-                    ${cert.fecha ? `<span class="cert-date">${formatDate(cert.fecha)}</span>` : ''}
-                </div>`
-            ).join('')}
+                    <span class="cert-name">${esc(c.nombre)}</span>
+                    ${c.emisor ? `<span class="cert-meta">${esc(c.emisor)}</span>` : ''}
+                    ${c.fecha ? `<span class="cert-meta">${formatDate(c.fecha)}</span>` : ''}
+                </div>`).join('')}
         </div>`;
 
-    const sidebarExtra = (cvData.disponibilidad || cvData.modalidad_trabajo) ? `
+    // ── Sidebar: Availability ────────────────────────────────────────
+    const sideExtra = (cvData.disponibilidad || cvData.modalidad_trabajo) ? `
         <div class="sidebar-section">
-            <h3 class="sidebar-section-title">Disponibilidad</h3>
-            ${cvData.disponibilidad ? `<p class="sidebar-text">${cvData.disponibilidad}</p>` : ''}
-            ${cvData.modalidad_trabajo ? `<p class="sidebar-text">${cvData.modalidad_trabajo}</p>` : ''}
+            <div class="section-title">Disponibilidad</div>
+            ${cvData.disponibilidad ? `<div class="skill-item"><span class="skill-bullet"></span><span>${esc(cvData.disponibilidad)}</span></div>` : ''}
+            ${cvData.modalidad_trabajo ? `<div class="skill-item"><span class="skill-bullet"></span><span>${esc(cvData.modalidad_trabajo)}</span></div>` : ''}
         </div>` : '';
 
-    // ── Main content ─────────────────────────────────────────────────
-    const expSection = sortedExp.length === 0 ? '' : `
-        <section>
-            <h2 class="main-section-title">
-                <span class="title-line"></span>Experiencia Laboral
-            </h2>
-            ${sortedExp.map(exp => {
-                const bullets = toBullets(exp.descripcion);
-                const dateRange = `${formatDate(exp.fecha_inicio)} – ${exp.es_trabajo_actual ? 'Presente' : formatDate(exp.fecha_fin)}`;
-                return `
-                <div class="entry">
-                    <div class="entry-header">
-                        <div>
-                            <span class="entry-company">${exp.empresa}</span>
-                            <span class="entry-role">${exp.cargo}</span>
-                        </div>
-                        <span class="entry-date">${dateRange}</span>
-                    </div>
-                    ${bullets.length > 0 ? `<ul class="bullet-list">${bullets.map(b => `<li>${b}</li>`).join('')}</ul>` : ''}
-                </div>`;
-            }).join('')}
-        </section>`;
-
-    const eduSection = sortedEdu.length === 0 ? '' : `
-        <section>
-            <h2 class="main-section-title">
-                <span class="title-line"></span>Educación
-            </h2>
-            ${sortedEdu.map(edu => {
-                const dateRange = `${formatDate(edu.fecha_inicio)} – ${edu.en_curso ? 'En curso' : formatDate(edu.fecha_fin)}`;
-                return `
-                <div class="entry">
-                    <div class="entry-header">
-                        <div>
-                            <span class="entry-company">${edu.institucion}</span>
-                            <span class="entry-role">${edu.titulo}${edu.nivel ? ` · ${edu.nivel}` : ''}</span>
-                        </div>
-                        <span class="entry-date">${dateRange}</span>
-                    </div>
-                    ${edu.descripcion ? `<p class="entry-desc">${edu.descripcion}</p>` : ''}
-                </div>`;
-            }).join('')}
-        </section>`;
-
-    // ── Full document ─────────────────────────────────────────────────
     const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>CV – ${userName}</title>
+  <title>CV – ${esc(userName)}</title>
   <style>
-    /* ── Reset ───────────────────────────────────────────────────── */
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: auto; }
 
     body {
-      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      font-family: 'Calibri', 'Segoe UI', Arial, Helvetica, sans-serif;
       font-size: 10pt;
       line-height: 1.5;
-      color: #1a1a2e;
-      background: #ffffff;
-      display: flex;
-      min-height: 100vh;
+      color: #1a1a1a;
+      background: #fff;
     }
 
-    /* ── Sidebar ─────────────────────────────────────────────────── */
-    .sidebar {
-      width: 230px;
-      min-width: 230px;
-      background: #1e3a5f;
-      color: #e8edf5;
-      padding: 36px 22px 36px 22px;
-      display: flex;
-      flex-direction: column;
-      gap: 0;
+    /* ── Header ─────────────────────────────────────────────────── */
+    .cv-header {
+      background: #d8e8f5;
+      padding: 22px 44px 18px;
+      text-align: center;
     }
-
-    .sidebar-name {
-      font-size: 18pt;
+    .cv-header-title {
+      font-size: 20pt;
       font-weight: 800;
-      color: #ffffff;
-      line-height: 1.15;
-      letter-spacing: -0.3px;
-      margin-bottom: 4px;
-    }
-
-    .sidebar-title {
-      font-size: 9pt;
-      font-weight: 600;
-      color: #7ec8e3;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.15);
+      letter-spacing: 2px;
+      color: #0f1c2e;
+      line-height: 1.2;
+    }
+    .cv-header-name {
+      font-size: 11pt;
+      color: #2c3e50;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
     }
 
-    .sidebar-section {
-      margin-bottom: 20px;
-    }
-
-    .sidebar-section-title {
-      font-size: 7.5pt;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      color: #7ec8e3;
-      margin-bottom: 8px;
-      padding-bottom: 4px;
-      border-bottom: 1px solid rgba(126,200,227,0.3);
-    }
-
-    /* Contact */
-    .contact-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 7px;
-      margin-bottom: 6px;
-    }
-    .contact-icon {
-      font-size: 9pt;
-      color: #7ec8e3;
-      min-width: 14px;
-      line-height: 1.5;
-      font-style: normal;
-    }
-    .contact-text, a.contact-text {
-      font-size: 8pt;
-      color: #c8d8ea;
-      word-break: break-all;
-      line-height: 1.4;
-      text-decoration: none;
-    }
-
-    /* Skills */
-    .skill-pills {
+    /* ── Contact bar ─────────────────────────────────────────────── */
+    .contact-bar {
+      background: #fff;
+      border-top: 1px solid #c5d8ec;
+      border-bottom: 1px solid #dde8f0;
+      padding: 9px 44px;
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
-    }
-    .skill-pill {
-      font-size: 7.5pt;
-      background: rgba(126,200,227,0.15);
-      color: #d0e8f5;
-      border: 1px solid rgba(126,200,227,0.25);
-      border-radius: 4px;
-      padding: 2px 7px;
-      line-height: 1.5;
-    }
-    .skill-level {
-      font-size: 6.5pt;
-      opacity: 0.75;
-    }
-
-    /* Languages */
-    .lang-row {
-      display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
-      margin-bottom: 5px;
-    }
-    .lang-name {
-      font-size: 8.5pt;
-      color: #d0e8f5;
-      font-weight: 600;
-    }
-    .lang-level {
-      font-size: 7.5pt;
-      color: #7ec8e3;
-    }
-
-    /* Certifications */
-    .cert-item {
-      margin-bottom: 8px;
-    }
-    .cert-name {
-      display: block;
-      font-size: 8pt;
-      font-weight: 600;
-      color: #d0e8f5;
-    }
-    .cert-issuer {
-      display: block;
-      font-size: 7.5pt;
-      color: #a0c4de;
-    }
-    .cert-date {
-      font-size: 7pt;
-      color: #7ec8e3;
-    }
-
-    .sidebar-text {
-      font-size: 8.5pt;
-      color: #c8d8ea;
-      margin-bottom: 3px;
-    }
-
-    /* ── Main area ───────────────────────────────────────────────── */
-    .main {
-      flex: 1;
-      padding: 36px 32px 36px 36px;
-      display: flex;
-      flex-direction: column;
       gap: 0;
     }
-
-    /* Summary */
-    .summary-box {
-      background: #f0f5fb;
-      border-left: 4px solid #1e3a5f;
-      border-radius: 0 8px 8px 0;
-      padding: 12px 16px;
-      margin-bottom: 22px;
-      font-size: 9.5pt;
-      color: #2d3748;
-      line-height: 1.6;
-    }
-
-    /* Section titles */
-    .main-section-title {
-      display: flex;
+    .ci {
+      display: inline-flex;
       align-items: center;
-      gap: 8px;
-      font-size: 11pt;
+      font-size: 8.5pt;
+      color: #333;
+      padding: 0 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    a.ci:hover { color: #1a5fa8; }
+    .sep {
+      color: #aab8c4;
+      font-size: 10pt;
+      line-height: 1;
+    }
+
+    /* ── Body layout ─────────────────────────────────────────────── */
+    .cv-body {
+      display: flex;
+      padding: 22px 44px 32px;
+      gap: 28px;
+    }
+    .col-main { flex: 1.75; }
+    .col-side {
+      flex: 1;
+      border-left: 1px solid #dde3ea;
+      padding-left: 22px;
+    }
+
+    /* ── Section titles ─────────────────────────────────────────── */
+    .section-title {
+      font-size: 8pt;
       font-weight: 700;
-      color: #1e3a5f;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      margin-bottom: 12px;
-      padding-bottom: 4px;
-      border-bottom: 2px solid #1e3a5f;
+      letter-spacing: 2px;
+      color: #0f1c2e;
+      border-bottom: 1.5px solid #0f1c2e;
+      padding-bottom: 3px;
+      margin-bottom: 10px;
     }
 
-    section {
-      margin-bottom: 20px;
+    /* ── Main sections ───────────────────────────────────────────── */
+    .section { margin-bottom: 18px; }
+
+    .summary-text {
+      font-size: 9.5pt;
+      line-height: 1.65;
+      color: #2d3748;
+      text-align: justify;
     }
 
-    /* Entries */
+    /* Experience / Education entries */
     .entry {
       margin-bottom: 12px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #eef2f7;
+      padding-bottom: 11px;
+      border-bottom: 0.5px solid #eaecef;
     }
-    .entry:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
+    .entry:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+
     .entry-header {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: baseline;
       gap: 8px;
-      margin-bottom: 3px;
     }
     .entry-company {
-      display: block;
       font-weight: 700;
-      font-size: 10.5pt;
-      color: #1a1a2e;
+      font-size: 10pt;
+      color: #0f1c2e;
     }
-    .entry-role {
-      display: block;
-      font-size: 9.5pt;
-      color: #1e3a5f;
-      font-weight: 600;
-      margin-top: 1px;
-    }
-    .entry-date {
+    .entry-dates {
       font-size: 8.5pt;
-      color: #6b7280;
+      color: #5a6a7a;
       white-space: nowrap;
       flex-shrink: 0;
+    }
+    .entry-role {
+      font-size: 9.5pt;
+      font-style: italic;
+      color: #3a4a5a;
       margin-top: 2px;
-      background: #f0f5fb;
-      padding: 1px 7px;
-      border-radius: 20px;
     }
     .entry-desc {
       font-size: 9pt;
-      color: #4b5563;
+      color: #4a5568;
       margin-top: 4px;
     }
-
     .bullet-list {
-      margin: 5px 0 0 16px;
+      margin: 5px 0 0 14px;
       padding: 0;
     }
     .bullet-list li {
       font-size: 9.5pt;
+      color: #2d3748;
       margin-bottom: 2px;
-      color: #374151;
+      line-height: 1.55;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    .sidebar-section { margin-bottom: 14px; }
+
+    .skill-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      font-size: 9.5pt;
+      color: #2d3748;
+      line-height: 1.5;
+      padding: 1px 0;
+    }
+    .skill-bullet {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      background: #4a5568;
+      border-radius: 50%;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+
+    .lang-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9.5pt;
+      padding: 3px 0;
+      border-bottom: 0.5px solid #eee;
+    }
+    .lang-row:last-child { border-bottom: none; }
+    .lang-name { font-weight: 600; color: #1a1a1a; }
+    .lang-level { color: #5a6a7a; font-size: 8.5pt; }
+
+    .cert-item { margin-bottom: 8px; }
+    .cert-name {
+      display: block;
+      font-size: 9pt;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .cert-meta {
+      display: block;
+      font-size: 8pt;
+      color: #5a6a7a;
     }
 
     /* ── Print ───────────────────────────────────────────────────── */
-    @page {
-      size: Letter;
-      margin: 0;
-    }
+    @page { margin: 0.5in; size: letter portrait; }
     @media print {
-      body { min-height: 0; }
-      .sidebar { min-height: 100vh; }
+      html, body { height: auto; }
+      body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       a { color: inherit; text-decoration: none; }
+      .cv-header, .contact-bar { break-inside: avoid; break-after: avoid; }
+      .entry { break-inside: avoid; }
+      .sidebar-section { break-inside: avoid; }
     }
   </style>
 </head>
 <body>
 
-  <!-- SIDEBAR -->
-  <div class="sidebar">
-    <div class="sidebar-name">${userName}</div>
-    <div class="sidebar-title">${cvData.titulo_profesional || ''}</div>
-
-    ${sidebarContact ? `
-    <div class="sidebar-section">
-      <h3 class="sidebar-section-title">Contacto</h3>
-      ${sidebarContact}
-    </div>` : ''}
-
-    ${sidebarSkills}
-    ${sidebarLangs}
-    ${sidebarCerts}
-    ${sidebarExtra}
+  <!-- HEADER -->
+  <div class="cv-header">
+    <div class="cv-header-title">${esc(cvData.titulo_profesional)}</div>
+    <div class="cv-header-name">${esc(userName)}</div>
   </div>
 
-  <!-- MAIN -->
-  <div class="main">
+  <!-- CONTACT BAR -->
+  ${contactParts.length > 0 ? `<div class="contact-bar">${contactBar}</div>` : ''}
 
-    ${cvData.resumen_profesional ? `<div class="summary-box">${cvData.resumen_profesional}</div>` : ''}
+  <!-- BODY -->
+  <div class="cv-body">
 
-    ${expSection}
-    ${eduSection}
+    <!-- LEFT COLUMN -->
+    <div class="col-main">
+      ${summarySection}
+      ${expSection}
+      ${eduSection}
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="col-side">
+      ${sideSkills}
+      ${sideLangs}
+      ${sideCerts}
+      ${sideExtra}
+    </div>
 
   </div>
 
 </body>
 </html>`;
 
-    const win = window.open('', '_blank', 'width=960,height=720');
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 450);
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;width:0;height:0;border:none;top:-9999px;left:-9999px;';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) { document.body.removeChild(iframe); return; }
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    iframe.onload = () => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => document.body.removeChild(iframe), 500);
+    };
 }

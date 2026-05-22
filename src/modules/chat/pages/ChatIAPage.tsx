@@ -5,6 +5,7 @@ import { RutaService } from '@/modules/chat/services/RutaService';
 import type { ChatIAType, MensajeUI } from '@/modules/chat/types/ConversacionType';
 import type { RutaGuardada, RutaAprendizajeData } from '@/modules/chat/types/RutaType';
 import { useAuthStore } from '@/modules/auth/services/AuthService';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/core/components/ui/card';
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UserService } from '@/modules/users/services/UserService';
+import { CVService } from '@/modules/cv/services/CVService';
 import { ChatService } from '../services/ChatService';
 import { cn } from '@/lib/utils';
 
@@ -308,7 +310,9 @@ export const ChatIAPage = () => {
     const [modoActivo, setModoActivo] = useState<ModoChat>(null);
     const [savingRuta, setSavingRuta] = useState(false);
     const [rutaPanelOpen, setRutaPanelOpen] = useState(false);
+    const [tieneCV, setTieneCV] = useState<boolean | null>(null);
 
+    const navigate = useNavigate();
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -335,6 +339,14 @@ export const ChatIAPage = () => {
         try {
             const data = await UserService.obtenerPersonaPorUsuario(authUser.id);
             setUserData(data);
+            if (data?.persona?.id) {
+                try {
+                    await CVService.obtenerCVPorPersona(data.persona.id);
+                    setTieneCV(true);
+                } catch {
+                    setTieneCV(false);
+                }
+            }
         } catch (error) {
             console.error('Error cargando datos de usuario:', error);
         } finally {
@@ -733,7 +745,52 @@ export const ChatIAPage = () => {
     };
 
     const gruposHistorial = agruparPorFecha(historial);
-    const nombreUsuario = persona?.nombre || authUser?.nombre || 'Profesional';
+    const nombreUsuario = persona?.nombre || authUser?.google_nombre || 'Profesional';
+
+    if (loading || tieneCV === null) {
+        return (
+            <div className="h-full w-full flex items-center justify-center bg-background">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-muted-foreground text-sm">Cargando tu espacio de mentoría...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (tieneCV === false) {
+        return (
+            <div className="h-full w-full flex items-center justify-center bg-background p-6">
+                <div className="max-w-md w-full text-center">
+                    <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                        <Brain className="w-10 h-10 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-foreground mb-3">Tu mentor IA te espera</h2>
+                    <p className="text-muted-foreground mb-6 leading-relaxed">
+                        Para usar el chatbot de mentoría necesitas tener tu CV registrado.
+                        Con esa información la IA puede analizar tu perfil, detectar tus brechas y
+                        guiarte hacia tus objetivos profesionales.
+                    </p>
+                    <div className="space-y-3">
+                        <Button
+                            onClick={() => navigate('/dashboard/cv')}
+                            className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white gap-2 shadow-lg"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            Crear mi CV para activar el mentor
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => navigate('/dashboard')}
+                            className="w-full"
+                        >
+                            Volver al dashboard
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="h-full w-full flex overflow-hidden bg-background print:block">

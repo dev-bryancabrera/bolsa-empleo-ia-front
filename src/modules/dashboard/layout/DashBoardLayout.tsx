@@ -43,7 +43,7 @@ export default function DashboardLayout({ title = "Dashboard" }: DashboardLayout
     const [loading, setLoading] = useState(true);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-    const isFullWidthRoute = location.pathname === '/dashboard/chat';
+    const isFullWidthRoute = ['/dashboard/chat', '/dashboard/portfolio'].includes(location.pathname);
 
     // ── Dark mode effect ───────────────────────────────────────────
     useEffect(() => {
@@ -80,7 +80,11 @@ export default function DashboardLayout({ title = "Dashboard" }: DashboardLayout
                 data.foto_perfil = fotoPerfilBase64;
             }
             setUsuario(data);
-            if (fotoPerfilBase64) setImagePreview(fotoPerfilBase64);
+            if (fotoPerfilBase64) {
+                setImagePreview(fotoPerfilBase64);
+            } else if (data.google_foto_url) {
+                setImagePreview(data.google_foto_url);
+            }
         } catch (error) {
             console.error('Error:', error);
             toast.error('Error al cargar el perfil');
@@ -194,7 +198,7 @@ export default function DashboardLayout({ title = "Dashboard" }: DashboardLayout
                         </div>
                         <div className={cn("flex-1 min-w-0 transition-all duration-200 overflow-hidden", sidebarCollapsed ? "lg:w-0 lg:opacity-0 lg:hidden" : "opacity-100")}>
                             <p className="text-xs font-semibold text-sidebar-foreground truncate">
-                                {usuario?.persona?.nombre ?? user?.nombre ?? "Usuario"}
+                                {usuario?.persona?.nombre ?? user?.google_nombre ?? "Usuario"}
                             </p>
                             <p className="text-[10px] text-sidebar-foreground/40 truncate">
                                 {usuario?.persona?.email ?? ""}

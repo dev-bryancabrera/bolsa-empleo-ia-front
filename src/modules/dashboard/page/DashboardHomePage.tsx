@@ -1,21 +1,59 @@
 import {
-    ArrowUpRight, Sparkles, RefreshCw, TrendingUp, Zap, Target,
-    Briefcase, Map, CheckCircle2, Circle, Clock, ChevronRight,
-    AlertTriangle, ArrowUp
+    RefreshCw, TrendingUp, Target, Briefcase,
+    CheckCircle2, Circle, Clock, ChevronRight,
+    AlertTriangle, ArrowUpRight, Zap, BookOpen,
+    Map, Sparkles, ExternalLink
 } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/core/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/core/components/ui/card"
 import { Button } from "@/core/components/ui/button"
 import { Badge } from "@/core/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { UserService } from '@/modules/users/services/UserService'
 import { TendenciaService } from '@/modules/dashboard/services/TendenciaService'
-import type { TendenciaData } from '@/modules/dashboard/types/TendenciaTypes'
+import type { TendenciaData, Recomendacion } from '@/modules/dashboard/types/TendenciaTypes'
 import { RutaService } from '@/modules/chat/services/RutaService'
 import type { RutaGuardada, RutaAprendizajeData } from '@/modules/chat/types/RutaType'
 import { DashboardEmptyState } from '@/modules/dashboard/components/DashboardEmptyState'
 import { useEffect, useState } from "react"
 import { useAuthStore } from "@/modules/auth/services/AuthService"
 import { useNavigate } from "react-router-dom"
+
+// Genera una URL de búsqueda real para una recomendación
+function resolveRecUrl(rec: Recomendacion): string {
+    const q = encodeURIComponent(rec.brecha_que_cierra || rec.titulo);
+    const year = new Date().getFullYear();
+
+    // Si la IA ya dio una URL de búsqueda válida, verificar que sea de plataforma conocida
+    if (rec.url) {
+        const u = rec.url.toLowerCase();
+        if (u.includes('udemy.com/courses/search') || u.includes('coursera.org/search') ||
+            u.includes('platzi.com/cursos') || u.includes('youtube.com/results') ||
+            u.includes('linkedin.com/learning')) {
+            return rec.url;
+        }
+    }
+
+    // Generar URL de búsqueda según plataforma o tipo
+    const plat = rec.plataforma;
+    if (plat === 'Coursera' || rec.tipo === 'Certificación')
+        return `https://www.coursera.org/search?query=${q}&sortBy=NEW`;
+    if (plat === 'Platzi')
+        return `https://platzi.com/cursos/?search=${q}`;
+    if (plat === 'YouTube')
+        return `https://www.youtube.com/results?search_query=${q}+tutorial+${year}&sp=EgQIBBAB`;
+    if (plat === 'LinkedIn_Learning' || rec.tipo === 'Red_profesional')
+        return `https://www.linkedin.com/learning/search?keywords=${q}`;
+    // Udemy por defecto para Curso/Proyecto
+    return `https://www.udemy.com/courses/search/?q=${q}&sort=newest`;
+}
+
+const PLAT_LABEL: Record<string, string> = {
+    Udemy: 'Buscar en Udemy',
+    Coursera: 'Buscar en Coursera',
+    Platzi: 'Buscar en Platzi',
+    YouTube: 'Ver en YouTube',
+    LinkedIn_Learning: 'LinkedIn Learning',
+};
 
 export const DashboardHomePage = () => {
     const authUser = useAuthStore((state) => state.user);
@@ -43,11 +81,7 @@ export const DashboardHomePage = () => {
         try {
             const data = await UserService.obtenerPersonaPorUsuario(authUser!.id);
             setUserData(data);
-        } catch (error) {
-            console.error('Error cargando datos de usuario:', error);
-        } finally {
-            setLoading(false);
-        }
+        } catch { /* silencioso */ } finally { setLoading(false); }
     };
 
     const fetchRutaActiva = async (personaId: number) => {
@@ -58,8 +92,12 @@ export const DashboardHomePage = () => {
                 const data: RutaAprendizajeData = JSON.parse(activa.json_ruta);
                 setRutaActiva({ guardada: activa, data });
             }
-        } catch (_) { /* silencioso */ }
+        } catch { /* silencioso */ }
     };
+
+    const esCVNotFound = (error: any) =>
+        error?.response?.data?.codigo === 'CV_NOT_FOUND' ||
+        (error?.response?.data?.error || error?.response?.data?.message || error?.message || '').includes('CV_NOT_FOUND');
 
     const fetchTendencias = async () => {
         setLoadingTendencias(true);
@@ -68,15 +106,9 @@ export const DashboardHomePage = () => {
             setTendencias(response.data);
             setTieneCV(true);
         } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('CV_NOT_FOUND') || msg.includes('CV')) {
-                setTieneCV(false);
-            } else {
-                setTieneCV(true);
-            }
-        } finally {
-            setLoadingTendencias(false);
-        }
+            if (esCVNotFound(error)) setTieneCV(false);
+            else setTieneCV(true);
+        } finally { setLoadingTendencias(false); }
     };
 
     const handleRegenerarTendencias = async () => {
@@ -85,502 +117,294 @@ export const DashboardHomePage = () => {
             const response = await TendenciaService.regenerarTendencias(userData.id_persona);
             setTendencias(response.data);
         } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('CV_NOT_FOUND') || msg.includes('CV')) setTieneCV(false);
-        } finally {
-            setRegenerando(false);
-        }
+            if (esCVNotFound(error)) setTieneCV(false);
+        } finally { setRegenerando(false); }
     };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-muted-foreground">Cargando tu dashboard...</p>
-                </div>
+    if (loading) return (
+        <div className="flex items-center justify-center h-80">
+            <div className="text-center space-y-3">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-sm text-muted-foreground">Cargando tu dashboard...</p>
             </div>
-        );
-    }
+        </div>
+    );
 
-    // Sin CV → vista informativa
-    if (tieneCV === false) {
-        return <DashboardEmptyState nombre={userData?.persona?.nombre} />;
-    }
+    if (tieneCV === false) return <DashboardEmptyState nombre={userData?.persona?.nombre} />;
 
     const brecha = tendencias?.analisis_brecha;
     const empActual = brecha?.puntuacion_empleabilidad_actual ?? tendencias?.estadisticas?.match_promedio ?? null;
     const empPotencial = brecha?.puntuacion_empleabilidad_potencial ?? null;
+    const breachasAltas = brecha?.brechas_criticas?.filter(b => b.impacto_empleabilidad === 'Alto').length ?? 0;
+    const habCount = tendencias?.estadisticas?.habilidades_registradas ?? 0;
 
     return (
-        <>
-            {/* Welcome */}
-            <div className="mb-8 relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-8 shadow-2xl">
-                <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
-                <div className="relative z-10 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
-                            <Sparkles className="w-10 h-10 animate-pulse" />
-                            ¡Hola {userData?.persona?.nombre}!
-                        </h1>
-                        <p className="text-white/90 text-lg">
-                            Tu asistente IA ha preparado recomendaciones personalizadas para impulsar tu carrera
-                        </p>
-                    </div>
-                    <Button
-                        onClick={handleRegenerarTendencias}
-                        disabled={regenerando || loadingTendencias}
-                        className="bg-white dark:bg-white/90 text-purple-600 hover:bg-purple-50 gap-2 shadow-lg"
-                    >
-                        <RefreshCw className={cn("w-4 h-4", regenerando && "animate-spin")} />
-                        {regenerando ? "Analizando..." : "Actualizar con IA"}
-                    </Button>
+        <div className="space-y-6">
+
+            {/* ── Header ── */}
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-foreground">
+                        Hola, {userData?.persona?.nombre} 👋
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                        {tendencias
+                            ? 'Tu análisis de mercado está listo — basado en tu CV y habilidades actuales'
+                            : 'Preparando tu análisis personalizado...'}
+                    </p>
                 </div>
+                <Button
+                    onClick={handleRegenerarTendencias}
+                    disabled={regenerando || loadingTendencias}
+                    variant="outline"
+                    className="gap-2 shrink-0"
+                >
+                    <RefreshCw className={cn("w-4 h-4", regenerando && "animate-spin")} />
+                    {regenerando ? 'Analizando...' : 'Actualizar análisis'}
+                </Button>
             </div>
 
-            {/* Stats Cards */}
-            {loadingTendencias ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    {[1, 2, 3, 4].map((i) => (
-                        <Card key={i} className="border-0 shadow-lg animate-pulse">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <div className="h-4 bg-muted rounded w-32" />
-                                <div className="w-10 h-10 bg-muted rounded-lg" />
-                            </CardHeader>
-                            <CardContent>
+            {/* ── Skeleton ── */}
+            {loadingTendencias && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[1, 2, 3].map(i => (
+                        <Card key={i} className="animate-pulse">
+                            <CardContent className="p-5">
+                                <div className="h-3 bg-muted rounded w-24 mb-3" />
                                 <div className="h-8 bg-muted rounded w-16 mb-2" />
-                                <div className="h-3 bg-muted rounded w-24" />
+                                <div className="h-2 bg-muted rounded w-full" />
                             </CardContent>
                         </Card>
                     ))}
                 </div>
-            ) : tendencias ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    {/* Empleabilidad actual */}
+            )}
+
+            {/* ── Stat cards ── */}
+            {!loadingTendencias && tendencias && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {empActual !== null && (
-                        <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white overflow-hidden relative group">
-                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                            <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-white/90">Empleabilidad Actual</CardTitle>
-                                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                                    <Target className="h-6 w-6 text-white" />
+                        <Card className="border-border">
+                            <CardContent className="p-5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Empleabilidad actual</span>
+                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                        <Target className="w-4 h-4 text-primary" />
+                                    </div>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="relative z-10">
-                                <div className="text-4xl font-bold text-white mb-1">{empActual}%</div>
+                                <p className="text-3xl font-bold text-foreground">{empActual}%</p>
                                 {empPotencial && (
-                                    <p className="text-sm text-white/80 flex items-center gap-1">
-                                        <span className="flex items-center font-semibold bg-white/20 px-2 py-0.5 rounded-full">
-                                            <ArrowUp className="h-3 w-3 mr-1" />{empPotencial}%
-                                        </span>
-                                        <span>potencial</span>
-                                    </p>
+                                    <div className="mt-2 space-y-1">
+                                        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                            <div className="h-full bg-primary rounded-full" style={{ width: `${empActual}%` }} />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <ArrowUpRight className="w-3 h-3 text-green-500" />
+                                            Potencial: <span className="text-green-600 font-semibold">{empPotencial}%</span> cerrando brechas
+                                        </p>
+                                    </div>
                                 )}
                             </CardContent>
                         </Card>
                     )}
 
-                    {/* Brechas críticas */}
-                    {brecha?.brechas_criticas && (
-                        <Card
-                            className="border-0 shadow-xl bg-gradient-to-br from-red-500 to-rose-600 text-white overflow-hidden relative group cursor-pointer"
-                            onClick={() => navigate('/dashboard/chat')}
-                        >
-                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                            <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-white/90">Brechas Críticas</CardTitle>
-                                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                                    <AlertTriangle className="h-6 w-6 text-white" />
+                    <Card
+                        className={cn("border-border cursor-pointer hover:border-red-200 transition-colors", breachasAltas > 0 && "border-red-100")}
+                        onClick={() => navigate('/dashboard/chat')}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Brechas de alto impacto</span>
+                                <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+                                    <AlertTriangle className="w-4 h-4 text-red-500" />
                                 </div>
-                            </CardHeader>
-                            <CardContent className="relative z-10">
-                                <div className="text-4xl font-bold text-white mb-1">
-                                    {brecha.brechas_criticas.filter(b => b.impacto_empleabilidad === 'Alto').length}
-                                </div>
-                                <p className="text-sm text-white/80">de impacto alto — clic para tu ruta</p>
-                            </CardContent>
-                        </Card>
-                    )}
+                            </div>
+                            <p className="text-3xl font-bold text-foreground">{breachasAltas}</p>
+                            <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                <ChevronRight className="w-3 h-3" />Generar ruta de aprendizaje
+                            </p>
+                        </CardContent>
+                    </Card>
 
-                    {/* Ruta activa */}
-                    {rutaActiva && (
-                        <Card
-                            className="border-0 shadow-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white overflow-hidden relative group cursor-pointer"
-                            onClick={() => navigate('/dashboard/chat')}
-                        >
-                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                            <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-white/90">Ruta Activa</CardTitle>
-                                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                                    <Map className="h-6 w-6 text-white" />
+                    <Card className="border-border">
+                        <CardContent className="p-5">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Habilidades en tu CV</span>
+                                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
+                                    <TrendingUp className="w-4 h-4 text-green-600" />
                                 </div>
-                            </CardHeader>
-                            <CardContent className="relative z-10">
-                                <div className="text-4xl font-bold text-white mb-1">
-                                    {(() => {
-                                        let p: Record<string, boolean> = {};
-                                        try { p = JSON.parse(rutaActiva.guardada.progreso_fases || '{}'); } catch (_) {}
-                                        const t = rutaActiva.data.fases?.length || 0;
-                                        return t > 0 ? Math.round((Object.values(p).filter(Boolean).length / t) * 100) : 0;
-                                    })()}%
-                                </div>
-                                <p className="text-sm text-white/80 flex items-center gap-1">
-                                    <span className="flex items-center font-semibold bg-white/20 px-2 py-0.5 rounded-full">
-                                        <Sparkles className="h-3 w-3 mr-1" />progreso
-                                    </span>
-                                    <span>completado</span>
-                                </p>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Match promedio */}
-                    {tendencias.estadisticas && (
-                        <Card className="border-0 shadow-xl bg-gradient-to-br from-green-500 to-green-600 text-white overflow-hidden relative group">
-                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                            <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-white/90">Habilidades</CardTitle>
-                                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                                    <TrendingUp className="h-6 w-6 text-white" />
-                                </div>
-                            </CardHeader>
-                            <CardContent className="relative z-10">
-                                <div className="text-4xl font-bold text-white mb-1">
-                                    {tendencias.estadisticas.habilidades_registradas}
-                                </div>
-                                <p className="text-sm text-white/80">registradas en tu CV</p>
-                            </CardContent>
-                        </Card>
-                    )}
+                            </div>
+                            <p className="text-3xl font-bold text-foreground">{habCount}</p>
+                            <p className="text-xs text-muted-foreground mt-1.5">registradas en tu perfil</p>
+                        </CardContent>
+                    </Card>
                 </div>
-            ) : null}
+            )}
 
-            {/* Análisis de Brechas */}
-            {brecha && (
-                <Card className="border-0 shadow-xl mb-6 overflow-hidden">
-                    <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 px-6 py-4">
-                        <CardTitle className="text-xl flex items-center gap-2">
-                            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center">
-                                <AlertTriangle className="w-5 h-5 text-white" />
-                            </div>
-                            Análisis de Brechas Competenciales
-                        </CardTitle>
-                        <CardDescription className="mt-1">{brecha.resumen_brecha}</CardDescription>
-                    </div>
-                    <CardContent className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Brechas críticas */}
-                            <div>
-                                <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Brechas a cerrar</h4>
-                                <div className="space-y-2">
-                                    {brecha.brechas_criticas.slice(0, 5).map((b, i) => (
-                                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl border-2 border-border bg-card hover:border-red-200 transition-colors">
-                                            <Badge className={cn(
-                                                'text-xs shrink-0',
-                                                b.impacto_empleabilidad === 'Alto' && 'bg-red-500 text-white border-0',
-                                                b.impacto_empleabilidad === 'Medio' && 'bg-yellow-500 text-white border-0',
-                                                b.impacto_empleabilidad === 'Bajo' && 'bg-gray-400 text-white border-0',
-                                            )}>
-                                                {b.impacto_empleabilidad}
-                                            </Badge>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-semibold text-foreground">{b.competencia}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {b.nivel_actual} → {b.nivel_requerido} · {b.tiempo_cierre_estimado}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            {/* Barra de empleabilidad */}
-                            <div className="flex flex-col justify-center">
-                                <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-4">Tu progreso de empleabilidad</h4>
-                                <div className="space-y-4">
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1.5">
-                                            <span className="text-muted-foreground">Nivel actual</span>
-                                            <span className="font-bold text-foreground">{brecha.puntuacion_empleabilidad_actual}%</span>
-                                        </div>
-                                        <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
-                                            <div
-                                                className="h-full bg-gradient-to-r from-red-400 to-orange-400 rounded-full transition-all duration-1000"
-                                                style={{ width: `${brecha.puntuacion_empleabilidad_actual}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1.5">
-                                            <span className="text-muted-foreground">Potencial al cerrar brechas</span>
-                                            <span className="font-bold text-green-600">{brecha.puntuacion_empleabilidad_potencial}%</span>
-                                        </div>
-                                        <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
-                                            <div
-                                                className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-1000"
-                                                style={{ width: `${brecha.puntuacion_empleabilidad_potencial}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800">
-                                        <ArrowUpRight className="w-5 h-5 text-green-600 shrink-0" />
-                                        <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                                            +{brecha.puntuacion_empleabilidad_potencial - brecha.puntuacion_empleabilidad_actual}% de mejora posible con tu ruta de aprendizaje
-                                        </p>
-                                    </div>
-                                </div>
-                                <Button
-                                    onClick={() => navigate('/dashboard/chat')}
-                                    className="mt-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white gap-2"
-                                >
-                                    <Sparkles className="w-4 h-4" />
-                                    Generar mi ruta personalizada
-                                </Button>
-                            </div>
-                        </div>
+            {/* ── Brechas resumen ── */}
+            {!loadingTendencias && brecha && brecha.resumen_brecha && (
+                <Card className="border-border">
+                    <CardContent className="p-5">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Resumen del análisis</p>
+                        <p className="text-sm text-foreground leading-relaxed">{brecha.resumen_brecha}</p>
                     </CardContent>
                 </Card>
             )}
 
-            {/* Ruta Activa Widget */}
-            {rutaActiva && (() => {
-                let progreso: Record<string, boolean> = {};
-                try { progreso = JSON.parse(rutaActiva.guardada.progreso_fases || '{}'); } catch (_) {}
-                const totalFases = rutaActiva.data.fases?.length || 0;
-                const completadas = Object.values(progreso).filter(Boolean).length;
-                const pct = totalFases > 0 ? Math.round((completadas / totalFases) * 100) : 0;
-                const faseActualIdx = rutaActiva.data.fases?.findIndex((_, i) => !progreso[`${rutaActiva.data.objetivo_profesional}-fase-${i}`]);
-                const faseActual = faseActualIdx !== undefined && faseActualIdx >= 0 ? rutaActiva.data.fases?.[faseActualIdx] : undefined;
+            {/* ── Skills + Recomendaciones ── */}
+            {!loadingTendencias && tendencias && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                return (
-                    <Card className="border-0 shadow-xl mb-6 overflow-hidden bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 text-white relative">
-                        <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
-                        <div className="absolute -right-10 -top-10 w-48 h-48 bg-white/10 rounded-full blur-3xl" />
-                        <CardContent className="relative z-10 p-6">
-                            <div className="flex flex-col md:flex-row md:items-start gap-6">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                                            <Map className="w-4 h-4 text-white" />
-                                        </div>
-                                        <span className="text-xs font-semibold text-white/80 uppercase tracking-wider">Mi Ruta Activa</span>
-                                        <Badge className="bg-white/20 text-white border-white/30 text-xs ml-auto md:ml-0">
-                                            {rutaActiva.guardada.estado}
-                                        </Badge>
+                    {/* Habilidades demandadas */}
+                    {tendencias.habilidades_demandadas?.length > 0 && (
+                        <Card className="lg:col-span-2 border-border">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                        <TrendingUp className="w-4 h-4 text-primary" />
                                     </div>
-                                    <h3 className="text-lg font-bold text-white leading-tight mb-1 mt-2 line-clamp-2">{rutaActiva.data.titulo}</h3>
-                                    <p className="text-sm text-white/80 mb-4 line-clamp-1">{rutaActiva.data.objetivo_profesional}</p>
-                                    <div className="mb-3">
-                                        <div className="flex justify-between text-xs text-white/80 mb-1.5">
-                                            <span>Progreso general</span>
-                                            <span className="font-bold text-white">{pct}% — {completadas}/{totalFases} fases</span>
-                                        </div>
-                                        <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
-                                            <div className="h-full bg-gradient-to-r from-white/90 to-white/70 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <span className="flex items-center gap-1 text-xs bg-white/15 px-2.5 py-1 rounded-full">
-                                            <Clock className="w-3 h-3" />{rutaActiva.data.duracion_estimada_meses} meses
-                                        </span>
-                                        {rutaActiva.data.salario_esperado && (
-                                            <span className="flex items-center gap-1 text-xs bg-white/15 px-2.5 py-1 rounded-full">
-                                                <TrendingUp className="w-3 h-3" />{rutaActiva.data.salario_esperado}
-                                            </span>
-                                        )}
+                                    <div>
+                                        <CardTitle className="text-base">Lo que el mercado exige</CardTitle>
+                                        <CardDescription className="text-xs">Habilidades más solicitadas para tu perfil y si ya las tienes</CardDescription>
                                     </div>
                                 </div>
-                                <div className="md:w-64 flex-shrink-0">
-                                    <p className="text-xs font-semibold text-white/70 uppercase tracking-wider mb-2">Fases</p>
-                                    <div className="space-y-1.5 mb-4">
-                                        {rutaActiva.data.fases?.slice(0, 5).map((fase, i) => {
-                                            const key = `${rutaActiva.data.objetivo_profesional}-fase-${i}`;
-                                            const done = progreso[key] === true;
-                                            const isCurrent = i === faseActualIdx;
-                                            return (
-                                                <div key={i} className={cn('flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs', done ? 'bg-white/10 opacity-60' : isCurrent ? 'bg-white/25 font-semibold' : 'bg-white/10')}>
-                                                    {done ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 flex-shrink-0" /> : isCurrent ? <div className="w-3.5 h-3.5 rounded-full bg-white flex-shrink-0 animate-pulse" /> : <Circle className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />}
-                                                    <span className={cn('text-white line-clamp-1', done && 'line-through')}>{fase.nombre}</span>
-                                                </div>
-                                            );
-                                        })}
-                                        {(rutaActiva.data.fases?.length || 0) > 5 && (
-                                            <p className="text-xs text-white/50 px-3">+{rutaActiva.data.fases!.length - 5} fases más</p>
-                                        )}
-                                    </div>
-                                    {faseActual && (
-                                        <div className="bg-white/15 rounded-xl p-3 mb-3">
-                                            <p className="text-xs text-white/70 mb-0.5">Próxima fase</p>
-                                            <p className="text-sm font-bold text-white line-clamp-1">{faseActual.nombre}</p>
-                                            {faseActual.nivel_dificultad && <p className="text-xs text-white/60 mt-0.5">{faseActual.nivel_dificultad}</p>}
-                                        </div>
-                                    )}
-                                    <Button onClick={() => navigate('/dashboard/chat', { state: { rutaId: rutaActiva.guardada.id } })} className="w-full bg-white text-violet-700 hover:bg-violet-50 font-semibold gap-2 shadow-lg">
-                                        Continuar en Mentor IA
-                                        <ChevronRight className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                );
-            })()}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                {/* Recomendaciones IA */}
-                <Card className="lg:col-span-2 border-0 shadow-xl bg-card overflow-hidden">
-                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 px-6 py-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-xl flex items-center gap-2">
-                                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center">
-                                        <Sparkles className="w-5 h-5 text-white" />
-                                    </div>
-                                    Habilidades en Demanda
-                                </CardTitle>
-                                <CardDescription className="mt-1">Lo que el mercado exige para tu perfil — y si ya lo tienes</CardDescription>
-                            </div>
-                        </div>
-                    </div>
-                    <CardContent className="p-6">
-                        {loadingTendencias ? (
-                            <div className="space-y-3">{[1, 2, 3, 4].map(i => <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />)}</div>
-                        ) : tendencias?.habilidades_demandadas ? (
-                            <div className="space-y-3">
-                                {tendencias.habilidades_demandadas.slice(0, 6).map((hab, i) => (
-                                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl border-2 border-border bg-card hover:border-purple-200 transition-colors">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-semibold text-sm text-foreground">{hab.nombre}</span>
-                                                <Badge className={cn('text-xs', hab.demanda === 'Alta' ? 'bg-red-500 text-white border-0' : hab.demanda === 'Media' ? 'bg-yellow-500 text-white border-0' : 'bg-blue-500 text-white border-0')}>
-                                                    {hab.demanda}
-                                                </Badge>
-                                                {hab.el_usuario_la_tiene === true && (
-                                                    <Badge className="bg-green-500 text-white border-0 text-xs">✓ Tienes</Badge>
-                                                )}
-                                                {hab.el_usuario_la_tiene === false && (
-                                                    <Badge variant="outline" className="text-xs border-red-200 text-red-600">✗ Brecha</Badge>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
-                                                    <div className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full" style={{ width: `${hab.porcentaje_ofertas}%` }} />
-                                                </div>
-                                                <span className="text-xs text-muted-foreground whitespace-nowrap">{hab.porcentaje_ofertas}% ofertas · {hab.tiempo_aprendizaje}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-                    </CardContent>
-                </Card>
-
-                {/* Recomendaciones */}
-                <Card className="border-0 shadow-xl bg-card overflow-hidden">
-                    <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                                <Sparkles className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                                <CardTitle className="text-lg text-white">Recomendaciones IA</CardTitle>
-                                <CardDescription className="text-white/80 text-sm">Basadas en tus brechas</CardDescription>
-                            </div>
-                        </div>
-                    </div>
-                    <CardContent className="p-6">
-                        {loadingTendencias ? (
-                            <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />)}</div>
-                        ) : tendencias?.recomendaciones ? (
-                            <div className="space-y-3">
-                                {tendencias.recomendaciones.slice(0, 3).map((item, i) => (
-                                    <div key={i} className="p-4 bg-card rounded-2xl border-2 border-border hover:border-purple-300 hover:shadow-lg transition-all group">
-                                        <div className="flex items-start gap-3">
-                                            <span className="text-2xl group-hover:scale-125 transition-transform">{item.icon}</span>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                                <div className="space-y-2">
+                                    {tendencias.habilidades_demandadas.slice(0, 7).map((hab, i) => (
+                                        <div key={i} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
                                             <div className="flex-1 min-w-0">
-                                                <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs mb-1 border-0">{item.tipo}</Badge>
-                                                <h4 className="font-bold text-sm text-foreground mb-1">{item.titulo}</h4>
-                                                <p className="text-xs text-muted-foreground mb-2">{item.razon}</p>
-                                                {item.url ? (
-                                                    <a href={item.url} target="_blank" rel="noopener noreferrer">
-                                                        <Button size="sm" className="h-7 text-xs px-3 w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-                                                            {item.accion} →
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-sm font-medium text-foreground">{hab.nombre}</span>
+                                                    <Badge className={cn(
+                                                        'text-xs px-1.5 py-0 border-0',
+                                                        hab.demanda === 'Alta' ? 'bg-red-100 text-red-700' :
+                                                            hab.demanda === 'Media' ? 'bg-amber-100 text-amber-700' :
+                                                                'bg-blue-100 text-blue-700'
+                                                    )}>
+                                                        {hab.demanda}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                                        <div className="h-full bg-primary/60 rounded-full" style={{ width: `${hab.porcentaje_ofertas}%` }} />
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground whitespace-nowrap">{hab.porcentaje_ofertas}% · {hab.tiempo_aprendizaje}</span>
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0">
+                                                {hab.el_usuario_la_tiene === true
+                                                    ? <span className="text-xs font-semibold text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Tienes</span>
+                                                    : hab.el_usuario_la_tiene === false
+                                                        ? <span className="text-xs font-semibold text-red-500 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Brecha</span>
+                                                        : null}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Recomendaciones */}
+                    {tendencias.recomendaciones?.length > 0 && (
+                        <Card className="border-border">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                                        <BookOpen className="w-4 h-4 text-violet-600" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Próximos pasos</CardTitle>
+                                        <CardDescription className="text-xs">Acciones para cerrar tus brechas principales</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pt-0 space-y-3">
+                                {tendencias.recomendaciones.slice(0, 4).map((rec, i) => {
+                                    const url = resolveRecUrl(rec);
+                                    const platLabel = rec.plataforma ? (PLAT_LABEL[rec.plataforma] ?? rec.accion) : rec.accion;
+                                    return (
+                                        <div key={i} className="p-3 rounded-xl border border-border hover:border-violet-200 transition-colors">
+                                            <div className="flex items-start gap-2.5">
+                                                <span className="text-xl shrink-0 mt-0.5">{rec.icon}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold text-foreground leading-tight mb-1">{rec.titulo}</p>
+                                                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{rec.razon}</p>
+                                                    <a href={url} target="_blank" rel="noopener noreferrer">
+                                                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 w-full">
+                                                            <ExternalLink className="w-3 h-3" />
+                                                            {platLabel}
                                                         </Button>
                                                     </a>
-                                                ) : (
-                                                    <Button size="sm" disabled className="h-7 text-xs px-3 w-full">{item.accion}</Button>
-                                                )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-                        <Button onClick={handleRegenerarTendencias} disabled={regenerando} className="w-full mt-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            {regenerando ? 'Analizando...' : 'Actualizar análisis'}
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
+                                    );
+                                })}
+                                <Button
+                                    variant="ghost"
+                                    className="w-full text-xs text-muted-foreground gap-1"
+                                    onClick={() => navigate('/dashboard/chat')}
+                                >
+                                    <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                                    Generar ruta personalizada con IA
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+            )}
 
-            {/* Roles Recomendados */}
-            {tendencias?.empleos_sugeridos && tendencias.empleos_sugeridos.length > 0 && (
-                <Card className="border-0 shadow-xl mb-6 overflow-hidden">
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40 px-6 py-4">
-                        <CardTitle className="text-xl flex items-center gap-2">
-                            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center">
-                                <Briefcase className="w-5 h-5 text-white" />
+            {/* ── Roles para explorar ── */}
+            {!loadingTendencias && tendencias?.empleos_sugeridos?.length > 0 && (
+                <Card className="border-border">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                                <Briefcase className="w-4 h-4 text-green-700" />
                             </div>
-                            Roles Recomendados para Tu Perfil
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                            Roles identificados por la IA según tu perfil — busca vacantes reales en las plataformas
-                        </CardDescription>
-                    </div>
-                    <CardContent className="p-6">
+                            <div>
+                                <CardTitle className="text-base">Roles que encajan con tu perfil</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Identificados por la IA según tus habilidades — usa los botones para buscar vacantes reales en cada plataforma
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {tendencias.empleos_sugeridos.slice(0, 4).map((empleo, i) => {
                                 const matchShow = empleo.match_actual ?? empleo.match;
-                                const matchPot = empleo.match_potencial;
                                 const q = encodeURIComponent(empleo.titulo);
                                 const loc = encodeURIComponent(empleo.ubicacion || 'Ecuador');
-                                const slug = empleo.titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
                                 const links = [
-                                    { label: 'LinkedIn', url: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${loc}&f_TPR=r604800&sortBy=DD`, color: 'text-blue-600 border-blue-200 hover:bg-blue-50' },
-                                    { label: 'Computrabajo', url: `https://ec.computrabajo.com/trabajo-de-${slug}`, color: 'text-orange-600 border-orange-200 hover:bg-orange-50' },
-                                    { label: 'Indeed', url: `https://ec.indeed.com/empleos?q=${q}&l=${encodeURIComponent(empleo.ubicacion || 'Ecuador')}&fromage=7`, color: 'text-indigo-600 border-indigo-200 hover:bg-indigo-50' },
+                                    { label: 'LinkedIn', url: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${loc}&f_TPR=r604800&sortBy=DD` },
+                                    { label: 'Computrabajo', url: `https://ec.computrabajo.com/?q=${q}` },
+                                    { label: 'Indeed', url: `https://ec.indeed.com/empleos?q=${q}&l=${loc}&fromage=7` },
                                 ];
                                 return (
-                                    <div key={i} className="p-5 border-2 border-border rounded-2xl hover:border-green-300 hover:shadow-xl transition-all group bg-card flex flex-col">
-                                        <div className="flex items-start justify-between mb-3">
-                                            <div className="flex-1">
-                                                <h4 className="font-bold text-foreground group-hover:text-green-600 transition-colors">{empleo.titulo}</h4>
+                                    <div key={i} className="p-4 rounded-xl border border-border hover:border-green-200 transition-colors">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-semibold text-sm text-foreground leading-tight">{empleo.titulo}</h4>
                                                 <p className="text-xs text-muted-foreground mt-0.5">📍 {empleo.ubicacion}</p>
                                             </div>
-                                            <div className="text-right shrink-0 ml-2">
-                                                <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 font-bold block mb-1">
-                                                    {matchShow}% ahora
-                                                </Badge>
-                                                {matchPot && <Badge variant="outline" className="border-green-300 text-green-600 text-xs">{matchPot}% potencial</Badge>}
-                                            </div>
+                                            <Badge className="bg-green-100 text-green-700 border-0 text-xs font-bold shrink-0">
+                                                {matchShow}% match
+                                            </Badge>
                                         </div>
-                                        <div className="flex flex-wrap gap-1.5 mb-3">
-                                            <Badge variant="outline" className="text-xs border-green-200 text-green-700 bg-green-50">{empleo.modalidad}</Badge>
-                                            <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">{empleo.nivel}</Badge>
-                                            <span className="text-xs font-semibold text-green-600">{empleo.salario_estimado}</span>
+                                        <div className="flex gap-1.5 mb-3">
+                                            <Badge variant="outline" className="text-xs">{empleo.modalidad}</Badge>
+                                            <Badge variant="outline" className="text-xs">{empleo.nivel}</Badge>
+                                            {empleo.salario_estimado && (
+                                                <span className="text-xs text-green-700 font-medium">{empleo.salario_estimado}</span>
+                                            )}
                                         </div>
-                                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2 flex-1">{empleo.razon_match}</p>
-                                        {empleo.brechas_para_aplicar && empleo.brechas_para_aplicar.length > 0 && (
-                                            <div className="mb-3 p-2 bg-orange-50 dark:bg-orange-950/30 rounded-lg">
-                                                <p className="text-xs font-semibold text-orange-600 mb-1">Para postular necesitas:</p>
-                                                <p className="text-xs text-orange-700 dark:text-orange-400">{empleo.brechas_para_aplicar[0]}</p>
-                                            </div>
-                                        )}
-                                        <div className="flex gap-2 pt-3 border-t">
+                                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{empleo.razon_match}</p>
+                                        <div className="flex gap-1.5">
                                             {links.map(link => (
                                                 <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1">
-                                                    <Button size="sm" variant="outline" className={cn('w-full h-7 text-xs px-1', link.color)}>
+                                                    <Button size="sm" variant="outline" className="w-full h-7 text-xs">
                                                         {link.label}
                                                     </Button>
                                                 </a>
@@ -594,75 +418,127 @@ export const DashboardHomePage = () => {
                 </Card>
             )}
 
-            {/* Plataformas */}
-            {tendencias?.plataformas_recomendadas && tendencias.plataformas_recomendadas.length > 0 && (
-                <Card className="border-0 shadow-xl mb-6">
-                    <CardHeader>
-                        <CardTitle className="text-xl flex items-center gap-2">
-                            <Target className="w-5 h-5 text-primary" />
-                            Plataformas Recomendadas
-                        </CardTitle>
-                        <CardDescription>Ideales para encontrar oportunidades en tu sector</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {tendencias.plataformas_recomendadas.slice(0, 4).map((plataforma, i) => (
-                                <a key={i} href={plataforma.url} target="_blank" rel="noopener noreferrer"
-                                    className="p-5 border-2 border-border rounded-2xl hover:border-purple-300 hover:shadow-xl transition-all group bg-gradient-to-br from-card to-purple-50 dark:to-purple-950/30">
-                                    <div className="flex flex-col items-center text-center gap-3">
-                                        <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
-                                            <span className="text-2xl">🚀</span>
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-sm text-foreground">{plataforma.nombre}</p>
-                                            <Badge className="bg-purple-100 text-purple-700 text-xs mt-1 border-0">{plataforma.tipo}</Badge>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground leading-relaxed">{plataforma.razon}</p>
-                                    </div>
-                                </a>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
+            {/* ── Insights + Ruta activa ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Insights personalizados */}
-            {tendencias?.insights_personalizados && (
-                <Card className="border-0 shadow-xl mb-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30">
-                    <CardHeader>
-                        <CardTitle className="text-xl flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-primary" />
-                            Insights Personalizados
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Insights */}
+                {!loadingTendencias && tendencias?.insights_personalizados && (
+                    <Card className="border-border">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                                    <Zap className="w-4 h-4 text-amber-600" />
+                                </div>
+                                <CardTitle className="text-base">Tu perfil en el mercado</CardTitle>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-0 space-y-3">
                             {tendencias.insights_personalizados.ventaja_competitiva && (
-                                <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800">
-                                    <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-1">Tu ventaja competitiva</p>
-                                    <p className="text-sm text-green-800 dark:text-green-300">{tendencias.insights_personalizados.ventaja_competitiva}</p>
+                                <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900">
+                                    <p className="text-xs font-semibold text-green-700 mb-1">Ventaja competitiva</p>
+                                    <p className="text-sm text-green-800 dark:text-green-300 leading-relaxed">{tendencias.insights_personalizados.ventaja_competitiva}</p>
                                 </div>
                             )}
-                            {(tendencias.insights_personalizados.riesgo_principal || tendencias.insights_personalizados.siguiente_paso) && (
-                                <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-800">
-                                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">Riesgo principal</p>
-                                    <p className="text-sm text-red-800 dark:text-red-300">
-                                        {tendencias.insights_personalizados.riesgo_principal || tendencias.insights_personalizados.siguiente_paso}
-                                    </p>
+                            {(tendencias.insights_personalizados.riesgo_principal) && (
+                                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900">
+                                    <p className="text-xs font-semibold text-red-600 mb-1">Riesgo principal</p>
+                                    <p className="text-sm text-red-800 dark:text-red-300 leading-relaxed">{tendencias.insights_personalizados.riesgo_principal}</p>
                                 </div>
                             )}
                             {(tendencias.insights_personalizados.siguiente_paso_urgente || tendencias.insights_personalizados.plazo_para_ser_competitivo) && (
-                                <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800 md:col-span-2">
-                                    <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Siguiente paso urgente</p>
-                                    <p className="text-sm text-blue-800 dark:text-blue-300">
+                                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900">
+                                    <p className="text-xs font-semibold text-blue-600 mb-1">Siguiente paso urgente</p>
+                                    <p className="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">
                                         {tendencias.insights_personalizados.siguiente_paso_urgente || tendencias.insights_personalizados.plazo_para_ser_competitivo}
                                     </p>
                                 </div>
                             )}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-        </>
+                            <Button variant="outline" className="w-full gap-2" onClick={handleRegenerarTendencias} disabled={regenerando}>
+                                <RefreshCw className={cn("w-3.5 h-3.5", regenerando && "animate-spin")} />
+                                {regenerando ? 'Analizando...' : 'Regenerar análisis'}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Ruta activa */}
+                {rutaActiva && (() => {
+                    let progreso: Record<string, boolean> = {};
+                    try { progreso = JSON.parse(rutaActiva.guardada.progreso_fases || '{}'); } catch { /* */ }
+                    const totalFases = rutaActiva.data.fases?.length || 0;
+                    const completadas = Object.values(progreso).filter(Boolean).length;
+                    const pct = totalFases > 0 ? Math.round((completadas / totalFases) * 100) : 0;
+                    const faseActualIdx = rutaActiva.data.fases?.findIndex((_, i) => !progreso[`${rutaActiva.data.objetivo_profesional}-fase-${i}`]) ?? -1;
+                    const faseActual = faseActualIdx >= 0 ? rutaActiva.data.fases?.[faseActualIdx] : undefined;
+
+                    return (
+                        <Card className="border-border">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                                        <Map className="w-4 h-4 text-violet-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <CardTitle className="text-base truncate">{rutaActiva.data.titulo}</CardTitle>
+                                        <CardDescription className="text-xs">{rutaActiva.data.objetivo_profesional}</CardDescription>
+                                    </div>
+                                    <Badge variant="outline" className="text-xs shrink-0">{rutaActiva.guardada.estado}</Badge>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pt-0 space-y-4">
+                                <div>
+                                    <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                                        <span>Progreso</span>
+                                        <span className="font-semibold text-foreground">{pct}% — {completadas}/{totalFases} fases</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                        <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    {rutaActiva.data.fases?.slice(0, 4).map((fase, i) => {
+                                        const key = `${rutaActiva.data.objetivo_profesional}-fase-${i}`;
+                                        const done = progreso[key] === true;
+                                        const isCurrent = i === faseActualIdx;
+                                        return (
+                                            <div key={i} className={cn('flex items-center gap-2 text-sm', done ? 'opacity-50' : '')}>
+                                                {done
+                                                    ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                                                    : isCurrent
+                                                        ? <div className="w-4 h-4 rounded-full bg-violet-500 shrink-0 animate-pulse" />
+                                                        : <Circle className="w-4 h-4 text-muted-foreground/40 shrink-0" />}
+                                                <span className={cn('line-clamp-1', done && 'line-through text-muted-foreground')}>{fase.nombre}</span>
+                                            </div>
+                                        );
+                                    })}
+                                    {(rutaActiva.data.fases?.length || 0) > 4 && (
+                                        <p className="text-xs text-muted-foreground pl-6">+{rutaActiva.data.fases!.length - 4} fases más</p>
+                                    )}
+                                </div>
+                                {faseActual && (
+                                    <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900">
+                                        <p className="text-xs text-violet-600 font-semibold mb-0.5">Próxima fase</p>
+                                        <p className="text-sm font-medium text-foreground">{faseActual.nombre}</p>
+                                    </div>
+                                )}
+                                <div className="flex gap-2 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{rutaActiva.data.duracion_estimada_meses} meses</span>
+                                    {rutaActiva.data.salario_esperado && (
+                                        <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" />{rutaActiva.data.salario_esperado}</span>
+                                    )}
+                                </div>
+                                <Button
+                                    onClick={() => navigate('/dashboard/chat', { state: { rutaId: rutaActiva.guardada.id } })}
+                                    className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                                >
+                                    Continuar en Mentor IA
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    );
+                })()}
+            </div>
+        </div>
     );
-}
+};

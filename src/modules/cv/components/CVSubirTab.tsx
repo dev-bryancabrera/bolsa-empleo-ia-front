@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/core/components/ui/card';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -13,9 +13,9 @@ import {
     Save,
     RefreshCw,
     User,
-    Briefcase,
-    GraduationCap,
     Award,
+    Eye,
+    FileWarning,
 } from 'lucide-react';
 import bolsaEmpleoIA from '@/core/api/bolsaEmpleoIA';
 import { toast } from 'react-toastify';
@@ -35,20 +35,33 @@ interface CVExtraido {
 
 export const CVSubirTab = ({ onCVImportado }: CVSubirTabProps) => {
     const [file, setFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isExtracting, setIsExtracting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [cvExtraido, setCvExtraido] = useState<CVExtraido | null>(null);
     const [editando, setEditando] = useState<CVExtraido | null>(null);
 
+    useEffect(() => {
+        return () => {
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+        };
+    }, [previewUrl]);
+
+    const setNewFile = (f: File) => {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setFile(f);
+        setPreviewUrl(URL.createObjectURL(f));
+        setCvExtraido(null);
+        setEditando(null);
+    };
+
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
         const dropped = e.dataTransfer.files[0];
         if (dropped && (dropped.type === 'application/pdf' || dropped.name.endsWith('.docx') || dropped.name.endsWith('.doc'))) {
-            setFile(dropped);
-            setCvExtraido(null);
-            setEditando(null);
+            setNewFile(dropped);
         } else {
             toast.error('Solo se aceptan archivos PDF o Word (.doc, .docx)');
         }
@@ -56,11 +69,7 @@ export const CVSubirTab = ({ onCVImportado }: CVSubirTabProps) => {
 
     const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selected = e.target.files?.[0];
-        if (selected) {
-            setFile(selected);
-            setCvExtraido(null);
-            setEditando(null);
-        }
+        if (selected) setNewFile(selected);
     };
 
     const handleExtraer = async () => {
@@ -108,7 +117,9 @@ export const CVSubirTab = ({ onCVImportado }: CVSubirTabProps) => {
     };
 
     const handleReset = () => {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
         setFile(null);
+        setPreviewUrl(null);
         setCvExtraido(null);
         setEditando(null);
     };
@@ -200,6 +211,30 @@ export const CVSubirTab = ({ onCVImportado }: CVSubirTabProps) => {
                             </div>
                         )}
                     </div>
+
+                    {/* Previsualización del archivo seleccionado */}
+                    {file && previewUrl && (
+                        <div className="rounded-xl border border-border overflow-hidden shadow-md">
+                            <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                                <Eye className="h-4 w-4 text-primary" />
+                                <span className="text-sm font-semibold text-foreground">Vista previa — {file.name}</span>
+                                <span className="ml-auto text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>
+                            </div>
+                            {file.type === 'application/pdf' ? (
+                                <iframe
+                                    src={previewUrl}
+                                    title="Vista previa del CV"
+                                    className="w-full h-[520px] bg-white"
+                                />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center gap-3 py-12 bg-muted/20">
+                                    <FileWarning className="h-10 w-10 text-amber-500" />
+                                    <p className="text-sm font-medium text-foreground">Vista previa no disponible para archivos Word</p>
+                                    <p className="text-xs text-muted-foreground">El archivo está listo para procesar. La IA extraerá los datos correctamente.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <Button
                         onClick={handleExtraer}
