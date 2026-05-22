@@ -1,15 +1,13 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/core/components/ui/button';
 import { Card, CardContent } from '@/core/components/ui/card';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
-import { useAuthStore } from '../services/AuthService';
+import { supabase } from '@/core/services/supabaseClient';
 
 export function ResetPasswordPage() {
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const token = searchParams.get('token') || '';
 
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,17 +15,27 @@ export function ResetPasswordPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [sessionReady, setSessionReady] = useState(false);
 
-    const restablecerPassword = useAuthStore(state => state.restablecerPassword);
+    useEffect(() => {
+        // Supabase procesa automáticamente el hash #access_token=...&type=recovery de la URL
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) setSessionReady(true);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                setSessionReady(true);
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
-        if (!token) {
-            setError('Enlace inválido. Por favor solicita uno nuevo.');
-            return;
-        }
         if (password.length < 6) {
             setError('La contraseña debe tener al menos 6 caracteres.');
             return;
@@ -39,11 +47,12 @@ export function ResetPasswordPage() {
 
         setIsLoading(true);
         try {
-            await restablecerPassword(token, password);
+            const { error: updateError } = await supabase.auth.updateUser({ password });
+            if (updateError) throw updateError;
             setSuccess(true);
             setTimeout(() => navigate('/auth/login', { replace: true }), 2500);
         } catch (err: any) {
-            setError(err?.response?.data?.error || 'El enlace es inválido o ha expirado.');
+            setError(err?.message || 'El enlace es inválido o ha expirado.');
         } finally {
             setIsLoading(false);
         }
@@ -54,7 +63,6 @@ export function ResetPasswordPage() {
             <Card className="overflow-hidden border-0 shadow-2xl">
                 <CardContent className="p-8 md:p-10">
                     <div className="flex flex-col gap-6 max-w-sm mx-auto">
-                        {/* Header */}
                         <div className="flex flex-col items-center text-center space-y-2">
                             <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mb-2">
                                 <svg className="w-7 h-7 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,8 +75,15 @@ export function ResetPasswordPage() {
                             </p>
                         </div>
 
-                        {/* Success state */}
-                        {success ? (
+                        {!sessionReady ? (
+                            <div className="flex flex-col items-center gap-3 py-6">
+                                <svg className="animate-spin h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                <p className="text-sm text-muted-foreground">Verificando enlace de recuperación...</p>
+                            </div>
+                        ) : success ? (
                             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-4 rounded-lg text-sm flex flex-col items-center gap-2 text-center">
                                 <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -144,7 +159,7 @@ export function ResetPasswordPage() {
                             </form>
                         )}
 
-                        {!success && (
+                        {sessionReady && !success && (
                             <div className="text-center text-sm text-muted-foreground">
                                 <Link to="/auth/login" className="text-primary font-medium hover:underline transition-colors">
                                     ← Volver al inicio de sesión

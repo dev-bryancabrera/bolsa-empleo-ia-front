@@ -1,7 +1,7 @@
 import { PrivateRoute } from "@/modules/auth/components/PrivateRoute"
 import { AuthLayout } from "@/modules/auth/layout/AuthLayout"
 import { LoginPage } from "@/modules/auth/pages/LoginPage"
-import { GoogleCallbackPage } from "@/modules/auth/pages/GoogleCallbackPage"
+import { AuthCallbackPage } from "@/modules/auth/pages/AuthCallbackPage"
 import { ForgotPasswordPage } from "@/modules/auth/pages/ForgotPasswordPage"
 import { ResetPasswordPage } from "@/modules/auth/pages/ResetPasswordPage"
 import { useAuthStore } from "@/modules/auth/services/AuthService";
@@ -37,8 +37,8 @@ export const AppRouter = () => {
     return (
         <BrowserRouter>
             <Routes>
-                {/* Callback de Google OAuth — fuera del AuthLayout para no mostrar el frame */}
-                <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+                {/* Callback de Supabase OAuth — fuera del AuthLayout para no mostrar el frame */}
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
                 {/* Auth */}
                 <Route path="/auth" element={<AuthLayout />}>

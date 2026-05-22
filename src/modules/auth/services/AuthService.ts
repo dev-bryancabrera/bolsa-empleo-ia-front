@@ -1,16 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import bolsaEmpleoIA from '@/core/api/bolsaEmpleoIA';
-import { getEnvVariables } from '@/core/helpers/getEnvVariable';
+import { supabase } from '@/core/services/supabaseClient';
 
 interface AuthState {
     status: 'checking' | 'authenticated' | 'not-authenticated';
     user: any;
-    login: (email: string, pass: string) => Promise<void>;
-    loginWithGoogle: () => void;
+    login: (email: string, password: string) => Promise<void>;
+    loginWithGoogle: () => Promise<void>;
     processGoogleCallback: (token: string, user: any) => void;
     solicitarRecuperacion: (email: string) => Promise<{ mensaje: string }>;
-    restablecerPassword: (token: string, nuevaPassword: string) => Promise<{ mensaje: string }>;
     logout: () => void;
     checkAuth: () => Promise<void>;
 }
@@ -33,26 +32,27 @@ export const useAuthStore = create<AuthState>()(
                 }
             },
 
-            // Redirige al backend para iniciar el flujo OAuth2 de Google
-            loginWithGoogle: () => {
-                const { VITE_API_URL } = getEnvVariables();
-                window.location.href = `${VITE_API_URL}/auth/google`;
+            loginWithGoogle: async () => {
+                const { error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: `${window.location.origin}/auth/callback`,
+                    },
+                });
+                if (error) throw error;
             },
 
-            // Procesa el callback de Google (recibe token y user desde la URL)
             processGoogleCallback: (token: string, user: any) => {
                 localStorage.setItem('token', token);
                 set({ status: 'authenticated', user });
             },
 
             solicitarRecuperacion: async (email: string) => {
-                const { data } = await bolsaEmpleoIA.post('/auth/recuperar-password', { email });
-                return data;
-            },
-
-            restablecerPassword: async (token: string, nuevaPassword: string) => {
-                const { data } = await bolsaEmpleoIA.post('/auth/restablecer-password', { token, nuevaPassword });
-                return data;
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/auth/reset-password`,
+                });
+                if (error) throw new Error(error.message);
+                return { mensaje: 'Correo de recuperación enviado. Revisa tu bandeja de entrada.' };
             },
 
             checkAuth: async () => {
@@ -72,15 +72,16 @@ export const useAuthStore = create<AuthState>()(
 
             logout: () => {
                 localStorage.removeItem('token');
+                supabase.auth.signOut();
                 set({ status: 'not-authenticated', user: null });
-            }
+            },
         }),
         {
             name: 'auth-storage',
             partialize: (state) => ({
                 status: state.status,
-                user: state.user
-            })
+                user: state.user,
+            }),
         }
     )
 );
