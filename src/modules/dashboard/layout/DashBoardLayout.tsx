@@ -104,8 +104,19 @@ export default function DashboardLayout({ title = "Dashboard" }: DashboardLayout
     };
 
     const filteredMenuItems = menuItems.filter((item) => {
-        if (!item.roles) return true;
-        return item.roles.includes(authUser?.rol);
+        // Admin-only items
+        if (item.roles) return item.roles.includes(authUser?.rol);
+
+        // Module permission filtering for non-admin users
+        if (authUser?.rol !== 'admin' && item.slug) {
+            try {
+                const permitidos: string[] | null = authUser?.modulos_permitidos
+                    ? JSON.parse(authUser.modulos_permitidos)
+                    : null;
+                if (permitidos !== null) return permitidos.includes(item.slug);
+            } catch { /* malformed JSON — allow all */ }
+        }
+        return true;
     });
 
     return (

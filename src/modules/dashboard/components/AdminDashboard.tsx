@@ -3,7 +3,6 @@ import { Users, FileText, ShieldCheck, UserCheck, TrendingUp, Activity } from 'l
 import { Card, CardContent, CardHeader, CardTitle } from '@/core/components/ui/card'
 import { Badge } from '@/core/components/ui/badge'
 import { UserService } from '@/modules/users/services/UserService'
-import { CVService } from '@/modules/cv/services/CVService'
 
 interface UsuarioItem {
     id: number
@@ -18,29 +17,19 @@ interface UsuarioItem {
 
 export const AdminDashboard = () => {
     const [usuarios, setUsuarios] = useState<UsuarioItem[]>([])
-    const [totalCVs, setTotalCVs] = useState<number | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        const cargar = async () => {
-            try {
-                const [users, cvs] = await Promise.allSettled([
-                    UserService.listarUsuarios(),
-                    CVService.listarCVs(),
-                ])
-                if (users.status === 'fulfilled') setUsuarios(users.value ?? [])
-                if (cvs.status === 'fulfilled') setTotalCVs((cvs.value ?? []).length)
-            } finally {
-                setLoading(false)
-            }
-        }
-        cargar()
+        UserService.listarUsuarios()
+            .then(data => setUsuarios(data ?? []))
+            .catch(() => {})
+            .finally(() => setLoading(false))
     }, [])
 
     const totalUsuarios = usuarios.length
     const usuariosActivos = usuarios.filter(u => u.activo).length
     const usuariosAdmin = usuarios.filter(u => u.rol === 'admin').length
-    const usuariosConCV = usuarios.filter(u => u.id_persona != null).length
+    const usuariosConPerfil = usuarios.filter(u => u.id_persona != null).length
 
     const stats = [
         {
@@ -51,11 +40,11 @@ export const AdminDashboard = () => {
             sub: `${usuariosActivos} activos`,
         },
         {
-            label: 'CVs registrados',
-            value: totalCVs ?? '—',
+            label: 'Con perfil/CV',
+            value: usuariosConPerfil,
             icon: FileText,
             color: 'bg-green-100 text-green-700',
-            sub: `${usuariosConCV} usuarios con perfil`,
+            sub: 'usuarios con datos registrados',
         },
         {
             label: 'Administradores',
