@@ -7,8 +7,9 @@ import { ConfiguracionIAService } from '@/modules/settings/services/Configuracio
 import type { ConfiguracionIA, ProveedorIA, ModeloIA, ProveedorInfo } from '@/modules/settings/types/ConfiguracionIATypes'
 import { useAuthStore } from '@/modules/auth/services/AuthService'
 import { UserService } from '@/modules/users/services/UserService'
-import { Cpu, Key, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, ChevronRight, Sparkles, Zap } from 'lucide-react'
+import { Cpu, Key, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, ChevronRight, Sparkles, Zap, Settings2 } from 'lucide-react'
 import { toast } from 'react-toastify'
+import { useNavigate } from 'react-router-dom'
 
 const PROVEEDOR_ICONS: Record<ProveedorIA, string> = {
     groq: '⚡',
@@ -24,6 +25,7 @@ const PROVEEDOR_COLORS: Record<ProveedorIA, string> = {
 
 export const ConfiguracionIAPage = () => {
     const authUser = useAuthStore(state => state.user)
+    const navigate = useNavigate()
     const [personaId, setPersonaId] = useState<number | null>(null)
     const [config, setConfig] = useState<ConfiguracionIA | null>(null)
     const [selectedProveedor, setSelectedProveedor] = useState<ProveedorIA>('groq')
@@ -44,6 +46,10 @@ export const ConfiguracionIAPage = () => {
         try {
             const userData = await UserService.obtenerPersonaPorUsuario(authUser!.id)
             const pid = userData.id_persona
+            if (!pid) {
+                setLoading(false)
+                return
+            }
             setPersonaId(pid)
             const cfg = await ConfiguracionIAService.obtener(pid)
             setConfig(cfg)
@@ -111,6 +117,34 @@ export const ConfiguracionIAPage = () => {
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+        )
+    }
+
+    if (!personaId) {
+        return (
+            <div className="flex h-full items-center justify-center p-6">
+                <div className="max-w-md w-full text-center">
+                    <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                        <Settings2 className="w-10 h-10 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-foreground mb-3">Configura tu IA</h2>
+                    <p className="text-muted-foreground mb-6 leading-relaxed">
+                        Para personalizar la configuración de IA necesitas tener tu CV registrado primero.
+                    </p>
+                    <div className="space-y-3">
+                        <Button
+                            onClick={() => navigate('/dashboard/cv')}
+                            className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white gap-2 shadow-lg"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            Crear mi CV primero
+                        </Button>
+                        <Button variant="outline" onClick={() => navigate('/dashboard')} className="w-full">
+                            Volver al dashboard
+                        </Button>
+                    </div>
+                </div>
             </div>
         )
     }

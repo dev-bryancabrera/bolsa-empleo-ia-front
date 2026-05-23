@@ -139,7 +139,9 @@ export const DashboardHomePage = () => {
         } finally { setRegenerando(false); }
     };
 
-    if (loading) return (
+    if (authUser?.rol === 'admin') return <AdminDashboard />;
+
+    if (loading || tieneCV === null) return (
         <div className="flex items-center justify-center h-80">
             <div className="text-center space-y-3">
                 <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
@@ -147,8 +149,6 @@ export const DashboardHomePage = () => {
             </div>
         </div>
     );
-
-    if (authUser?.rol === 'admin') return <AdminDashboard />;
 
     if (tieneCV === false) return <DashboardEmptyState nombre={userData?.persona?.nombre} />;
 

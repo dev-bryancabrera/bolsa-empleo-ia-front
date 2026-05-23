@@ -13,6 +13,7 @@ import { UserInfoPage } from "@/modules/users/pages/UserInfoPage";
 import { ConfiguracionIAPage } from "@/modules/settings/pages/ConfiguracionIAPage";
 import { PortfolioEditorPage } from "@/modules/portfolio/pages/PortfolioEditorPage";
 import { PortfolioPublicPage } from "@/modules/portfolio/pages/PortfolioPublicPage";
+import { AdminUsersPage } from "@/modules/dashboard/components/AdminUsersPage";
 import { lazy, Suspense, useEffect, useState } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
@@ -63,6 +64,7 @@ export const AppRouter = () => {
                     <Route path="perfil" element={<UserInfoPage />} />
                     <Route path="configuracion-ia" element={<ConfiguracionIAPage />} />
                     <Route path="portfolio" element={<PortfolioEditorPage />} />
+                    <Route path="usuarios" element={<AdminUsersPage />} />
                 </Route>
 
                 {/* Portafolio público — sin auth */}
