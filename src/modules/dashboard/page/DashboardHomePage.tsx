@@ -14,6 +14,7 @@ import type { TendenciaData, Recomendacion } from '@/modules/dashboard/types/Ten
 import { RutaService } from '@/modules/chat/services/RutaService'
 import type { RutaGuardada, RutaAprendizajeData } from '@/modules/chat/types/RutaType'
 import { DashboardEmptyState } from '@/modules/dashboard/components/DashboardEmptyState'
+import { AdminDashboard } from '@/modules/dashboard/components/AdminDashboard'
 import { useEffect, useState } from "react"
 import { useAuthStore } from "@/modules/auth/services/AuthService"
 import { useNavigate } from "react-router-dom"
@@ -67,14 +68,22 @@ export const DashboardHomePage = () => {
     const [regenerando, setRegenerando] = useState(false);
 
     useEffect(() => {
-        if (authUser?.id) fetchUserData();
+        if (!authUser?.id) return;
+        if (authUser.rol === 'admin') {
+            setLoading(false);
+            return;
+        }
+        fetchUserData();
     }, [authUser]);
 
     useEffect(() => {
-        if (userData) {
-            fetchTendencias();
-            fetchRutaActiva(userData.id_persona);
+        if (!userData) return;
+        if (!userData.id_persona) {
+            setTieneCV(false);
+            return;
         }
+        fetchTendencias();
+        fetchRutaActiva(userData.id_persona);
     }, [userData]);
 
     const fetchUserData = async () => {
@@ -95,9 +104,17 @@ export const DashboardHomePage = () => {
         } catch { /* silencioso */ }
     };
 
-    const esCVNotFound = (error: any) =>
-        error?.response?.data?.codigo === 'CV_NOT_FOUND' ||
-        (error?.response?.data?.error || error?.response?.data?.message || error?.message || '').includes('CV_NOT_FOUND');
+    const esCVNotFound = (error: any) => {
+        if (error?.response?.status === 404) return true;
+        const msg = (
+            error?.response?.data?.codigo ||
+            error?.response?.data?.mensaje ||
+            error?.response?.data?.error ||
+            error?.response?.data?.message ||
+            error?.message || ''
+        ).toLowerCase();
+        return msg.includes('cv') && (msg.includes('encontr') || msg.includes('not found'));
+    };
 
     const fetchTendencias = async () => {
         setLoadingTendencias(true);
@@ -129,6 +146,8 @@ export const DashboardHomePage = () => {
             </div>
         </div>
     );
+
+    if (authUser?.rol === 'admin') return <AdminDashboard />;
 
     if (tieneCV === false) return <DashboardEmptyState nombre={userData?.persona?.nombre} />;
 
