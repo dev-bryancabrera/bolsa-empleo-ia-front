@@ -9,16 +9,10 @@ const bolsaEmpleoIA = axios.create({
 
 // Middleware de Axios: Intercepta cada petición para añadir el Token
 bolsaEmpleoIA.interceptors.request.use(config => {
-    // Obtenemos el token del localStorage (o de tu store)
     const token = localStorage.getItem('token');
-
     if (token) {
-        config.headers = {
-            ...config.headers,
-            'Authorization': `Bearer ${token}`
-        } as any;
+        config.headers['Authorization'] = `Bearer ${token}`;
     }
-
     return config;
 });
 
