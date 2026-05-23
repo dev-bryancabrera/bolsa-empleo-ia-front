@@ -106,6 +106,7 @@ export const DashboardHomePage = () => {
 
     const esCVNotFound = (error: any) => {
         if (error?.response?.status === 404) return true;
+        if (error?.response?.data?.codigo === 'CV_NOT_FOUND') return true;
         const msg = (
             error?.response?.data?.codigo ||
             error?.response?.data?.mensaje ||

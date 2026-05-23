@@ -27,6 +27,7 @@ import { UserService } from '@/modules/users/services/UserService';
 import { CVService } from '@/modules/cv/services/CVService';
 import { ChatService } from '../services/ChatService';
 import { cn } from '@/lib/utils';
+import { AdminChatDashboard } from '@/modules/dashboard/components/AdminChatDashboard';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface FaseProgress {
@@ -317,6 +318,11 @@ export const ChatIAPage = () => {
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
+        if (authUser?.rol === 'admin') {
+            setLoading(false);
+            setTieneCV(true);
+            return;
+        }
         fetchCVDataUsuario();
         inputRef.current?.focus();
     }, []);
@@ -746,6 +752,8 @@ export const ChatIAPage = () => {
 
     const gruposHistorial = agruparPorFecha(historial);
     const nombreUsuario = persona?.nombre || authUser?.google_nombre || 'Profesional';
+
+    if (authUser?.rol === 'admin') return <AdminChatDashboard />;
 
     if (loading || tieneCV === null) {
         return (

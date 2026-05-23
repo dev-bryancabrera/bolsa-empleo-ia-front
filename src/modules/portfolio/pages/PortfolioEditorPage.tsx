@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useAuthStore } from '@/modules/auth/services/AuthService';
+import { UserService } from '@/modules/users/services/UserService';
+import { CVService } from '@/modules/cv/services/CVService';
 import {
     Eye, EyeOff, Save, Sparkles, Globe, ExternalLink, Loader2,
     Plus, Trash2, GripVertical, ChevronDown, ChevronUp, Link, Palette,
@@ -99,6 +103,9 @@ async function comprimirImagen(file: File, maxW: number, maxH: number, quality =
 }
 
 export const PortfolioEditorPage = () => {
+    const authUser = useAuthStore(state => state.user);
+    const navigate = useNavigate();
+    const [tieneCV, setTieneCV] = useState<boolean | null>(null);
     const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -148,6 +155,23 @@ export const PortfolioEditorPage = () => {
     const loadPortfolio = async () => {
         setLoading(true);
         try {
+            // CV guard: check if user has a CV before showing the portfolio editor
+            if (authUser?.id) {
+                try {
+                    const userData = await UserService.obtenerPersonaPorUsuario(authUser.id);
+                    if (userData?.persona?.id) {
+                        await CVService.obtenerCVPorPersona(userData.persona.id);
+                        setTieneCV(true);
+                    } else {
+                        setTieneCV(false);
+                        return;
+                    }
+                } catch {
+                    setTieneCV(false);
+                    return;
+                }
+            }
+
             let p: PortfolioData;
             try {
                 p = await PortfolioService.obtener();
@@ -301,9 +325,36 @@ export const PortfolioEditorPage = () => {
         finally { setUploadingFondo(false); }
     };
 
-    if (loading) return (
+    if (loading || tieneCV === null) return (
         <div className="flex h-96 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+        </div>
+    );
+
+    if (tieneCV === false) return (
+        <div className="flex h-full items-center justify-center p-6">
+            <div className="max-w-md w-full text-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                    <Globe className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-foreground mb-3">Tu portafolio te espera</h2>
+                <p className="text-muted-foreground mb-6 leading-relaxed">
+                    Para crear tu portafolio web necesitas tener tu CV registrado.
+                    Con esa información construimos tu página profesional automáticamente.
+                </p>
+                <div className="space-y-3">
+                    <Button
+                        onClick={() => navigate('/dashboard/cv')}
+                        className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white gap-2 shadow-lg"
+                    >
+                        <Sparkles className="w-4 h-4" />
+                        Crear mi CV para activar el portafolio
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/dashboard')} className="w-full">
+                        Volver al dashboard
+                    </Button>
+                </div>
+            </div>
         </div>
     );
 
