@@ -1,5 +1,5 @@
 import {
-    RefreshCw, TrendingUp, Target, Briefcase,
+    RefreshCw, TrendingUp, Target,
     CheckCircle2, Circle, Clock, ChevronRight,
     AlertTriangle, ArrowUpRight, Zap, BookOpen,
     Map, Sparkles, ExternalLink
@@ -172,6 +172,23 @@ export const DashboardHomePage = () => {
                             ? 'Tu análisis de mercado está listo — basado en tu CV y habilidades actuales'
                             : 'Preparando tu análisis personalizado...'}
                     </p>
+                    {authUser?.rol === 'admin' && tendencias?.estadisticas && (() => {
+                        const proveedor = tendencias.estadisticas.proveedor_ia;
+                        const modelo = tendencias.estadisticas.modelo_ia;
+                        if (!proveedor) return null;
+                        const esGemini = proveedor === 'gemini';
+                        return (
+                            <span className={cn(
+                                "inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 rounded-full text-xs font-medium",
+                                esGemini
+                                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                                    : "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+                            )}>
+                                <span className={cn("w-1.5 h-1.5 rounded-full", esGemini ? "bg-blue-500" : "bg-orange-500")} />
+                                {esGemini ? `Gemini 2.0 Flash` : `LLaMA 3.3 70B`}
+                            </span>
+                        );
+                    })()}
                 </div>
                 <Button
                     onClick={handleRegenerarTendencias}
@@ -266,6 +283,64 @@ export const DashboardHomePage = () => {
                     <CardContent className="p-5">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Resumen del análisis</p>
                         <p className="text-sm text-foreground leading-relaxed">{brecha.resumen_brecha}</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ── Brechas de habilidades ── */}
+            {!loadingTendencias && brecha?.brechas_criticas && brecha.brechas_criticas.length > 0 && (
+                <Card className="border-border">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+                                <AlertTriangle className="w-4 h-4 text-red-500" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-base">Qué debes desarrollar primero</CardTitle>
+                                <CardDescription className="text-xs">Habilidades ordenadas por impacto en tu empleabilidad — de mayor a menor urgencia</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-3">
+                        {brecha.brechas_criticas.slice(0, 5).map((b, i) => {
+                            const NIVELES = ['Ninguno', 'Básico', 'Intermedio', 'Avanzado', 'Experto'];
+                            const actualIdx = Math.max(0, NIVELES.indexOf(b.nivel_actual));
+                            const reqIdx = Math.max(0, NIVELES.indexOf(b.nivel_requerido));
+                            const pctActual = (actualIdx / 4) * 100;
+                            const pctReq = (reqIdx / 4) * 100;
+                            const colorClass = b.impacto_empleabilidad === 'Alto'
+                                ? { border: 'border-red-100 bg-red-50/40 dark:bg-red-950/20', bar: 'bg-red-400', badge: 'bg-red-100 text-red-700' }
+                                : b.impacto_empleabilidad === 'Medio'
+                                    ? { border: 'border-amber-100 bg-amber-50/40 dark:bg-amber-950/20', bar: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700' }
+                                    : { border: 'border-green-100 bg-green-50/40 dark:bg-green-950/20', bar: 'bg-green-400', badge: 'bg-green-100 text-green-700' };
+                            return (
+                                <div key={i} className={cn('p-3 rounded-xl border', colorClass.border)}>
+                                    <div className="flex items-center justify-between mb-2 gap-2">
+                                        <span className="text-sm font-semibold text-foreground">{b.competencia}</span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <Badge className={cn('text-xs border-0', colorClass.badge)}>
+                                                {b.impacto_empleabilidad === 'Alto' ? '🔴 Urgente' : b.impacto_empleabilidad === 'Medio' ? '🟡 Importante' : '🟢 Recomendado'}
+                                            </Badge>
+                                            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                                <Clock className="w-3 h-3" />{b.tiempo_cierre_estimado}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="relative h-2 bg-muted rounded-full overflow-hidden mb-1.5">
+                                        <div className="absolute h-full bg-muted-foreground/15 rounded-full" style={{ width: `${pctReq}%` }} />
+                                        <div className={cn('absolute h-full rounded-full', colorClass.bar)} style={{ width: `${pctActual}%` }} />
+                                    </div>
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                        <span>Nivel actual: <span className="font-medium text-foreground">{b.nivel_actual === 'Ninguno' ? 'Sin conocimiento' : b.nivel_actual}</span></span>
+                                        <span>Necesitas llegar a: <span className="font-medium text-foreground">{b.nivel_requerido}</span></span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <Button variant="ghost" className="w-full text-xs text-muted-foreground gap-1" onClick={() => navigate('/dashboard/chat')}>
+                            <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                            Generar mi ruta de aprendizaje personalizada
+                        </Button>
                     </CardContent>
                 </Card>
             )}
@@ -375,68 +450,6 @@ export const DashboardHomePage = () => {
                 </div>
             )}
 
-            {/* ── Roles para explorar ── */}
-            {!loadingTendencias && tendencias?.empleos_sugeridos?.length > 0 && (
-                <Card className="border-border">
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
-                                <Briefcase className="w-4 h-4 text-green-700" />
-                            </div>
-                            <div>
-                                <CardTitle className="text-base">Roles que encajan con tu perfil</CardTitle>
-                                <CardDescription className="text-xs">
-                                    Identificados por la IA según tus habilidades — usa los botones para buscar vacantes reales en cada plataforma
-                                </CardDescription>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {tendencias.empleos_sugeridos.slice(0, 4).map((empleo, i) => {
-                                const matchShow = empleo.match_actual ?? empleo.match;
-                                const q = encodeURIComponent(empleo.titulo);
-                                const loc = encodeURIComponent(empleo.ubicacion || 'Ecuador');
-                                const links = [
-                                    { label: 'LinkedIn', url: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${loc}&f_TPR=r604800&sortBy=DD` },
-                                    { label: 'Computrabajo', url: `https://ec.computrabajo.com/?q=${q}` },
-                                    { label: 'Indeed', url: `https://ec.indeed.com/empleos?q=${q}&l=${loc}&fromage=7` },
-                                ];
-                                return (
-                                    <div key={i} className="p-4 rounded-xl border border-border hover:border-green-200 transition-colors">
-                                        <div className="flex items-start justify-between gap-2 mb-2">
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="font-semibold text-sm text-foreground leading-tight">{empleo.titulo}</h4>
-                                                <p className="text-xs text-muted-foreground mt-0.5">📍 {empleo.ubicacion}</p>
-                                            </div>
-                                            <Badge className="bg-green-100 text-green-700 border-0 text-xs font-bold shrink-0">
-                                                {matchShow}% match
-                                            </Badge>
-                                        </div>
-                                        <div className="flex gap-1.5 mb-3">
-                                            <Badge variant="outline" className="text-xs">{empleo.modalidad}</Badge>
-                                            <Badge variant="outline" className="text-xs">{empleo.nivel}</Badge>
-                                            {empleo.salario_estimado && (
-                                                <span className="text-xs text-green-700 font-medium">{empleo.salario_estimado}</span>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{empleo.razon_match}</p>
-                                        <div className="flex gap-1.5">
-                                            {links.map(link => (
-                                                <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1">
-                                                    <Button size="sm" variant="outline" className="w-full h-7 text-xs">
-                                                        {link.label}
-                                                    </Button>
-                                                </a>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
 
             {/* ── Insights + Ruta activa ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -23,6 +23,8 @@ export interface Estadisticas {
     rutas_aprendizaje?: number;
     match_promedio: number;
     match_incremento?: number;
+    proveedor_ia?: string;
+    modelo_ia?: string;
 }
 
 export interface RutaAprendizaje {
@@ -60,6 +62,7 @@ export interface EmpleoSugerido {
     brechas_para_aplicar?: string[];
     razon_match: string;
     url?: string;
+    terminos_busqueda?: string;
 }
 
 export interface HabilidadDemandada {

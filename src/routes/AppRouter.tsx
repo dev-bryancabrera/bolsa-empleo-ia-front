@@ -16,9 +16,25 @@ import { PortfolioPublicPage } from "@/modules/portfolio/pages/PortfolioPublicPa
 import { AdminUsersPage } from "@/modules/dashboard/components/AdminUsersPage";
 import { AdminCVAnalysisPage } from "@/modules/dashboard/components/AdminCVAnalysisPage";
 import { lazy, Suspense, useEffect, useState } from "react"
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom"
 
 const DashboardLayout = lazy(() => import('@/modules/dashboard/layout/DashBoardLayout'));
+
+const AuthWatcher = () => {
+    const logout = useAuthStore(state => state.logout);
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const handleTokenExpirado = () => {
+            logout();
+            navigate('/auth/login', { replace: true });
+        };
+        window.addEventListener('auth:token-expirado', handleTokenExpirado);
+        return () => window.removeEventListener('auth:token-expirado', handleTokenExpirado);
+    }, [logout, navigate]);
+
+    return null;
+};
 
 const LoadingSpinner = () => (
     <div className="flex h-screen w-full items-center justify-center">
@@ -27,17 +43,19 @@ const LoadingSpinner = () => (
 );
 
 export const AppRouter = () => {
-    const isAuthenticated = useAuthStore(state => state.status === "authenticated");
+    const status = useAuthStore(state => state.status);
+    const checkAuth = useAuthStore(state => state.checkAuth);
     const [checkingAuth, setCheckingAuth] = useState(true);
 
     useEffect(() => {
-        setCheckingAuth(false);
+        checkAuth().finally(() => setCheckingAuth(false));
     }, [])
 
     if (checkingAuth) return <LoadingSpinner />;
 
     return (
         <BrowserRouter>
+            <AuthWatcher />
             <Routes>
                 {/* Callback de Supabase OAuth — fuera del AuthLayout para no mostrar el frame */}
                 <Route path="/auth/callback" element={<AuthCallbackPage />} />

@@ -55,8 +55,16 @@ function addMonthsToNow(months: number) {
 }
 
 // ─── Markdown-lite renderer ───────────────────────────────────────────────────
+function decodeEntities(text: string) {
+    return text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+}
+
 const MessageContent = ({ content }: { content: string }) => {
-    const lines = content.split('\n');
+    const lines = decodeEntities(content).split('\n');
     return (
         <div className="text-sm space-y-0.5 leading-relaxed">
             {lines.map((line, i) => {
@@ -90,12 +98,13 @@ const MessageContent = ({ content }: { content: string }) => {
 };
 
 function renderInline(text: string) {
-    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
     return (
         <>
             {parts.map((part, i) => {
                 if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
                 if (part.startsWith('*')  && part.endsWith('*'))  return <em key={i}>{part.slice(1, -1)}</em>;
+                if (part.startsWith('`')  && part.endsWith('`'))  return <code key={i} className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{part.slice(1, -1)}</code>;
                 return <span key={i}>{part}</span>;
             })}
         </>
@@ -312,6 +321,9 @@ export const ChatIAPage = () => {
     const [savingRuta, setSavingRuta] = useState(false);
     const [rutaPanelOpen, setRutaPanelOpen] = useState(false);
     const [tieneCV, setTieneCV] = useState<boolean | null>(null);
+    const [isCreatingChat, setIsCreatingChat] = useState(false);
+    const [isDeletingChat, setIsDeletingChat] = useState(false);
+    const [modeloIA, setModeloIA] = useState<string | null>(null);
 
     const navigate = useNavigate();
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -462,6 +474,13 @@ export const ChatIAPage = () => {
                 },
             ]);
 
+            try {
+                const meta = typeof respuesta.metadata === 'string'
+                    ? JSON.parse(respuesta.metadata)
+                    : respuesta.metadata;
+                if (meta?.modelo) setModeloIA(meta.modelo);
+            } catch (_) {}
+
             await cargarHistorial(userData.persona.id);
         } catch {
             toast.error('Error al enviar el mensaje');
@@ -495,6 +514,7 @@ export const ChatIAPage = () => {
     };
 
     const handleNuevaConversacion = async () => {
+        setIsCreatingChat(true);
         try {
             const nuevoChat = await ChatService.crear(userData.persona.id, 'Nueva sesión');
             setChatActualId(nuevoChat.id);
@@ -503,7 +523,6 @@ export const ChatIAPage = () => {
             setRutaAprendizaje(null);
             setRutaGuardadaActual(null);
             setModoActivo(null);
-            inputRef.current?.focus();
 
             const respuesta = await ConversacionService.enviarMensaje(
                 nuevoChat.id, userData.persona.id, '__INIT__', { esNuevaConversacion: true }
@@ -517,12 +536,16 @@ export const ChatIAPage = () => {
 
             toast.success('Nueva sesión iniciada');
             await cargarHistorial(userData.persona.id);
+            inputRef.current?.focus();
         } catch {
             toast.error('Error al iniciar sesión');
+        } finally {
+            setIsCreatingChat(false);
         }
     };
 
     const handleEliminarChat = async (id: number) => {
+        setIsDeletingChat(true);
         try {
             await ChatService.eliminar(id);
             if (chatActualId === id) {
@@ -535,6 +558,8 @@ export const ChatIAPage = () => {
             await cargarHistorial(userData.persona.id);
         } catch {
             toast.error('Error al eliminar la sesión');
+        } finally {
+            setIsDeletingChat(false);
         }
     };
 
@@ -803,6 +828,19 @@ export const ChatIAPage = () => {
     return (
         <div className="h-full w-full flex overflow-hidden bg-background print:block">
 
+            {/* ── Overlay de bloqueo (crear / eliminar) ─────────────────── */}
+            {(isCreatingChat || isDeletingChat) && (
+                <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center">
+                    <div className="bg-card rounded-2xl px-8 py-6 flex flex-col items-center gap-3 shadow-2xl border border-border">
+                        <Loader2 className="w-8 h-8 text-violet-600 animate-spin" />
+                        <p className="text-sm font-semibold text-foreground">
+                            {isCreatingChat ? 'Creando nueva sesión...' : 'Eliminando sesión...'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Por favor espera</p>
+                    </div>
+                </div>
+            )}
+
             {/* ── Panel Izquierdo – Sidebar ──────────────────────────────── */}
             <div className={cn(
                 'transition-all duration-300 border-r border-border bg-card flex flex-col flex-shrink-0 print:hidden',
@@ -873,7 +911,7 @@ export const ChatIAPage = () => {
                                             {chats.map(chat => (
                                                 <div
                                                     key={chat.id}
-                                                    onClick={() => handleCargarConversacion(chat)}
+                                                    onClick={() => !isCreatingChat && !isDeletingChat && handleCargarConversacion(chat)}
                                                     className={cn(
                                                         'group flex items-start gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all',
                                                         chatActualId === chat.id
@@ -1011,8 +1049,23 @@ export const ChatIAPage = () => {
                             <div>
                                 <h2 className="font-bold text-foreground text-sm">Mentor de Carrera IA</h2>
                                 <div className="flex items-center gap-1.5">
-                                    <span className="w-2 h-2 bg-emerald-400 rounded-full" />
-                                    <span className="text-xs text-muted-foreground">Listo para ayudarte</span>
+                                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                                    {authUser?.rol === 'admin' && modeloIA ? (
+                                        <span className={cn(
+                                            "text-xs font-medium px-1.5 py-0.5 rounded-full",
+                                            modeloIA.includes('llama') || modeloIA.includes('mixtral') || modeloIA.includes('gemma')
+                                                ? "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"
+                                                : "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400"
+                                        )}>
+                                            {modeloIA.includes('llama-3.3') ? 'LLaMA 3.3 70B'
+                                                : modeloIA.includes('llama-3.1') ? 'LLaMA 3.1 8B'
+                                                : modeloIA.includes('gemini-2.0') ? 'Gemini 2.0 Flash'
+                                                : modeloIA.includes('gemini-1.5') ? 'Gemini 1.5 Flash'
+                                                : modeloIA}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">Listo para ayudarte</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1178,9 +1231,9 @@ export const ChatIAPage = () => {
                                 disabled={isLoading}
                             />
                             <Button
-                                onClick={handleEnviarMensaje}
+                                onClick={() => handleEnviarMensaje()}
                                 disabled={!inputMensaje.trim() || isLoading}
-                                className="h-[52px] w-[52px] p-0 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 flex-shrink-0"
+                                className="h-[52px] w-[52px] p-0 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 flex-shrink-0 cursor-pointer"
                             >
                                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                             </Button>
@@ -1495,7 +1548,7 @@ const RutaAprendizajePanel = ({
                                 <div className="flex flex-wrap gap-1">
                                     {ruta.perfil_actual.brechas_identificadas.map((b, i) => (
                                         <Badge key={i} variant="secondary" className="text-xs bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 font-normal">
-                                            {b}
+                                            {typeof b === 'string' ? b : (b as { competencia?: string }).competencia ?? JSON.stringify(b)}
                                         </Badge>
                                     ))}
                                 </div>
@@ -1580,7 +1633,9 @@ const RutaAprendizajePanel = ({
                                                             <p className="text-xs font-semibold text-muted-foreground mb-1">Competencias</p>
                                                             <div className="flex flex-wrap gap-1">
                                                                 {fase.competencias_a_desarrollar.map((comp, ci) => (
-                                                                    <Badge key={ci} variant="outline" className="text-xs font-normal py-0">{comp}</Badge>
+                                                                    <Badge key={ci} variant="outline" className="text-xs font-normal py-0">
+                                                                        {typeof comp === 'string' ? comp : (comp as { nombre?: string; competencia?: string }).nombre ?? (comp as { competencia?: string }).competencia ?? JSON.stringify(comp)}
+                                                                    </Badge>
                                                                 ))}
                                                             </div>
                                                         </div>
@@ -1595,7 +1650,7 @@ const RutaAprendizajePanel = ({
                                                                 {fase.acciones_recomendadas.map((acc, ai) => (
                                                                     <li key={ai} className="text-xs text-muted-foreground flex gap-1.5 items-start">
                                                                         <ChevronRight className="w-3 h-3 mt-0.5 text-muted-foreground/60 flex-shrink-0" />
-                                                                        {acc}
+                                                                        {typeof acc === 'string' ? acc : (acc as { accion?: string; descripcion?: string }).accion ?? (acc as { descripcion?: string }).descripcion ?? JSON.stringify(acc)}
                                                                     </li>
                                                                 ))}
                                                             </ul>

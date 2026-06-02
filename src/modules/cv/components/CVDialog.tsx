@@ -1173,8 +1173,8 @@ export const CVDialog = ({
                         Cancelar
                     </Button>
                     <Button
-                        type="submit"
-                        form="cv-form"
+                        type="button"
+                        onClick={handleSubmit(onSubmitCV, () => { setActiveTab('informacion'); toast.error('Hay errores en la pestaña "Info". Revísalos antes de guardar.'); })}
                         disabled={isSubmitting}
                         className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 gap-2 shadow-md hover:shadow-lg transition-all"
                     >

@@ -7,7 +7,6 @@ const bolsaEmpleoIA = axios.create({
     baseURL: VITE_API_URL
 });
 
-// Middleware de Axios: Intercepta cada petición para añadir el Token
 bolsaEmpleoIA.interceptors.request.use(config => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -15,5 +14,16 @@ bolsaEmpleoIA.interceptors.request.use(config => {
     }
     return config;
 });
+
+bolsaEmpleoIA.interceptors.response.use(
+    response => response,
+    error => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('token');
+            window.dispatchEvent(new Event('auth:token-expirado'));
+        }
+        return Promise.reject(error);
+    }
+);
 
 export default bolsaEmpleoIA;
