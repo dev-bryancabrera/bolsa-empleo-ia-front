@@ -6,6 +6,7 @@ export interface CVData {
     nivel_educacion: string;
     anios_experiencia: number;
     sector_profesional: string;
+    email?: string;
     telefono?: string;
     linkedin_url?: string;
     github_url?: string;

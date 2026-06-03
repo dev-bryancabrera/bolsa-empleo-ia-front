@@ -370,6 +370,8 @@ export const CVPage = () => {
     const [idiomas, setIdiomas] = useState<Idioma[]>([]);
     const [certificaciones, setCertificaciones] = useState<Certificacion[]>([]);
 
+    const [dialogScrollTo, setDialogScrollTo] = useState<'contacto' | undefined>(undefined);
+
     // Optimización IA
     const [isOptimizing, setIsOptimizing] = useState(false);
     const [isApplyingOptimization, setIsApplyingOptimization] = useState(false);
@@ -600,10 +602,10 @@ export const CVPage = () => {
         {
             id: 'contacto',
             label: 'Contacto',
-            desc: 'Teléfono o ubicación',
+            desc: 'Email, teléfono o ubicación',
             peso: 10,
-            completo: !!(cvData.telefono || cvData.ciudad),
-            accion: () => setIsModalOpen(true),
+            completo: !!(cvData.email || cvData.telefono || cvData.ciudad),
+            accion: () => { setDialogScrollTo('contacto'); setIsModalOpen(true); },
         },
         {
             id: 'experiencia',
@@ -879,7 +881,7 @@ export const CVPage = () => {
                             </Card>
 
                             {/* Info de Contacto */}
-                            {(cvData.telefono || cvData.ciudad || cvData.pais || cvData.linkedin_url || cvData.github_url || cvData.portfolio_url || cvData.disponibilidad || cvData.modalidad_trabajo) && (
+                            {(cvData.email || cvData.telefono || cvData.ciudad || cvData.pais || cvData.linkedin_url || cvData.github_url || cvData.portfolio_url || cvData.disponibilidad || cvData.modalidad_trabajo) && (
                                 <Card className="border-0 shadow-lg mb-6 bg-gradient-to-br from-cyan-50 to-card dark:from-cyan-950/30">
                                     <CardHeader>
                                         <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
@@ -889,6 +891,12 @@ export const CVPage = () => {
                                     </CardHeader>
                                     <CardContent>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                            {cvData.email && (
+                                                <div className="flex items-center gap-2 bg-card rounded-lg px-3 py-2 border border-cyan-100 dark:border-cyan-900 shadow-sm">
+                                                    <svg className="h-4 w-4 text-cyan-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                                    <span className="text-sm text-foreground truncate">{cvData.email}</span>
+                                                </div>
+                                            )}
                                             {cvData.telefono && (
                                                 <div className="flex items-center gap-2 bg-card rounded-lg px-3 py-2 border border-cyan-100 dark:border-cyan-900 shadow-sm">
                                                     <Phone className="h-4 w-4 text-cyan-600 flex-shrink-0" />
@@ -1390,10 +1398,11 @@ export const CVPage = () => {
 
             <CVDialog
                 open={isModalOpen}
-                onOpenChange={setIsModalOpen}
+                onOpenChange={(o) => { setIsModalOpen(o); if (!o) setDialogScrollTo(undefined); }}
                 editingCV={cvData}
                 habilidadesIniciales={habilidades}
                 onSubmit={handleSaveCV}
+                scrollTo={dialogScrollTo}
             />
 
             <CVOptimizarModal

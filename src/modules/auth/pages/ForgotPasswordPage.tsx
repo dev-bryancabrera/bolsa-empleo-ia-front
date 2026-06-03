@@ -23,8 +23,15 @@ export function ForgotPasswordPage() {
         try {
             const result = await solicitarRecuperacion(email);
             setMessage(result.mensaje);
-        } catch {
-            setError('Ocurrió un error. Por favor intenta más tarde.');
+        } catch (err: unknown) {
+            if (err && typeof err === 'object' && 'response' in err) {
+                const axiosErr = err as { response: { data: { error?: string } } };
+                setError(axiosErr.response.data?.error || 'Ocurrió un error. Por favor intenta más tarde.');
+            } else if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError('Ocurrió un error. Por favor intenta más tarde.');
+            }
         } finally {
             setIsLoading(false);
         }

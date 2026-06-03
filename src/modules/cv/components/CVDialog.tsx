@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,7 +26,7 @@ import {
 } from '@/core/components/ui/select';
 import {
     Plus, Trash2, Briefcase, Award, GraduationCap, X, Loader2,
-    Phone, MapPin, Globe, Linkedin, Github, Calendar, Languages, BadgeCheck,
+    Phone, MapPin, Globe, Linkedin, Github, Calendar, Languages, BadgeCheck, Mail,
 } from 'lucide-react';
 import type { HabilidadData } from '../types/HabilidadType';
 import type { ExperienciaLaboral, Educacion, Idioma, Certificacion } from '../types/CVType';
@@ -48,6 +48,7 @@ const cvSchema = z.object({
     nivel_educacion: z.string().min(1, 'Selecciona un nivel de educación'),
     anios_experiencia: z.number().min(0, 'Los años de experiencia no pueden ser negativos'),
     sector_profesional: z.string().min(3, 'El sector profesional es requerido'),
+    email: z.string().email('Email inválido').optional().or(z.literal('')),
     telefono: z.string().optional(),
     linkedin_url: z.string().optional(),
     github_url: z.string().optional(),
@@ -73,6 +74,7 @@ interface CVDialogProps {
     editingCV?: any;
     habilidadesIniciales?: HabilidadData[];
     onSubmit: (editingCV: any, habilidades: HabilidadData[]) => void;
+    scrollTo?: 'contacto';
 }
 
 const emptyExp = (): Omit<ExperienciaLaboral, 'id' | 'id_cv'> => ({
@@ -95,8 +97,10 @@ export const CVDialog = ({
     editingCV,
     habilidadesIniciales = [],
     onSubmit,
+    scrollTo,
 }: CVDialogProps) => {
     const [activeTab, setActiveTab] = useState('informacion');
+    const contactoRef = useRef<HTMLDivElement>(null);
     const [habilidades, setHabilidades] = useState<HabilidadData[]>(habilidadesIniciales);
     const [habilidadesEliminadas, setHabilidadesEliminadas] = useState<number[]>([]);
     const [userData, setUserData] = useState<any>(null);
@@ -141,6 +145,7 @@ export const CVDialog = ({
             nivel_educacion: '',
             anios_experiencia: 0,
             sector_profesional: '',
+            email: '',
             telefono: '',
             linkedin_url: '',
             github_url: '',
@@ -171,6 +176,22 @@ export const CVDialog = ({
     });
 
     useEffect(() => {
+        if (open && scrollTo === 'contacto') {
+            setActiveTab('informacion');
+            setTimeout(() => {
+                if (contactoRef.current) {
+                    const scrollContainer = contactoRef.current.closest('.overflow-y-auto');
+                    if (scrollContainer) {
+                        scrollContainer.scrollTo({ top: contactoRef.current.offsetTop - 16, behavior: 'smooth' });
+                    } else {
+                        contactoRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }
+            }, 200);
+        }
+    }, [open, scrollTo]);
+
+    useEffect(() => {
         if (editingCV) {
             reset({
                 titulo_profesional: editingCV.titulo_profesional || '',
@@ -178,6 +199,7 @@ export const CVDialog = ({
                 nivel_educacion: editingCV.nivel_educacion || '',
                 anios_experiencia: Number(editingCV.anios_experiencia) || 0,
                 sector_profesional: editingCV.sector_profesional || '',
+                email: editingCV.email || '',
                 telefono: editingCV.telefono || '',
                 linkedin_url: editingCV.linkedin_url || '',
                 github_url: editingCV.github_url || '',
@@ -625,6 +647,7 @@ export const CVDialog = ({
                                 </Card>
 
                                 {/* Información de Contacto */}
+                                <div ref={contactoRef} className="scroll-mt-2">
                                 <Card className="border-2 border-cyan-100 bg-gradient-to-br from-cyan-50/50 via-white to-cyan-50/30 hover:shadow-md transition-shadow">
                                     <CardContent className="pt-6">
                                         <div className="flex items-start gap-4">
@@ -634,6 +657,13 @@ export const CVDialog = ({
                                             <div className="flex-1 space-y-4">
                                                 <h3 className="text-base font-semibold text-gray-900">Información de Contacto</h3>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium flex items-center gap-1"><Mail className="h-3.5 w-3.5 text-cyan-600" /> Email de contacto</Label>
+                                                        <Input placeholder="tu@email.com" type="email" className="border-gray-300 focus:border-cyan-500" {...register('email')} />
+                                                        {errors.email && (
+                                                            <p className="text-sm text-red-500 flex items-center gap-1"><X className="h-3 w-3" />{errors.email.message}</p>
+                                                        )}
+                                                    </div>
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium flex items-center gap-1"><Phone className="h-3.5 w-3.5 text-cyan-600" /> Teléfono</Label>
                                                         <Input placeholder="+593 99 999 9999" className="border-gray-300 focus:border-cyan-500" {...register('telefono')} />
@@ -699,6 +729,7 @@ export const CVDialog = ({
                                         </div>
                                     </CardContent>
                                 </Card>
+                                </div>
                             </form>
                         </TabsContent>
 

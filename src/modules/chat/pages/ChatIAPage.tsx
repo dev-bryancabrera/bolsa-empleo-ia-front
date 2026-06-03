@@ -223,7 +223,6 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; font-size: 11
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
         <span style="background:#eef2ff;color:#333697;border:1px solid #c7d2fe;padding:4px 12px;border-radius:20px;font-size:10px;font-weight:600;">⏱️ ${ruta.duracion_estimada_meses} meses de duración</span>
         ${ruta.nivel_inicio ? `<span style="background:#eef2ff;color:#333697;border:1px solid #c7d2fe;padding:4px 12px;border-radius:20px;font-size:10px;font-weight:600;">📊 ${ruta.nivel_inicio}</span>` : ''}
-        ${ruta.salario_esperado ? `<span style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;padding:4px 12px;border-radius:20px;font-size:10px;font-weight:600;">💰 ${ruta.salario_esperado}</span>` : ''}
         <span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:4px 12px;border-radius:20px;font-size:10px;font-weight:600;">📈 Progreso: ${pct}% (${fasesCompletadas}/${totalFases} fases)</span>
     </div>
 </div>
@@ -409,19 +408,8 @@ export const ChatIAPage = () => {
     const handleEnviarMensaje = async (mensajeOverride?: string) => {
         const mensajeTexto = (mensajeOverride ?? inputMensaje).trim();
         if (!mensajeTexto || isLoading) return;
-        let chatId = chatActualId;
 
-        if (!chatActualId) {
-            try {
-                const nuevoChat = await ChatService.crear(userData.persona.id, mensajeTexto.substring(0, 50));
-                chatId = nuevoChat.id;
-                setChatActualId(nuevoChat.id);
-            } catch {
-                toast.error('Error al crear el chat');
-                return;
-            }
-        }
-
+        // Mostrar mensaje del usuario inmediatamente, antes de cualquier llamada a la API
         const mensajeUsuario: MensajeUI = {
             id: `temp-${Date.now()}`,
             tipo: 'usuario',
@@ -435,6 +423,21 @@ export const ChatIAPage = () => {
         setMensajes(prev => [...prev, {
             id: `typing-${Date.now()}`, tipo: 'ia', contenido: '', timestamp: new Date().toISOString(), loading: true,
         }]);
+
+        let chatId = chatActualId;
+
+        if (!chatActualId) {
+            try {
+                const nuevoChat = await ChatService.crear(userData.persona.id, mensajeTexto.substring(0, 50));
+                chatId = nuevoChat.id;
+                setChatActualId(nuevoChat.id);
+            } catch {
+                toast.error('Error al crear el chat');
+                setMensajes(prev => prev.filter(m => !m.loading));
+                setIsLoading(false);
+                return;
+            }
+        }
 
         try {
             const respuesta = await ConversacionService.enviarMensaje(
@@ -1475,12 +1478,6 @@ const RutaAprendizajePanel = ({
                         <Award className="w-3.5 h-3.5 text-violet-500" />
                         Meta: {addMonthsToNow(ruta.duracion_estimada_meses)}
                     </div>
-                    {ruta.salario_esperado && (
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-lg font-medium">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            {ruta.salario_esperado}
-                        </div>
-                    )}
                 </div>
                 {ruta.nivel_inicio && (
                     <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">

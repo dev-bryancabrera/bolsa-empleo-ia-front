@@ -48,11 +48,8 @@ export const useAuthStore = create<AuthState>()(
             },
 
             solicitarRecuperacion: async (email: string) => {
-                const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/auth/reset-password`,
-                });
-                if (error) throw new Error(error.message);
-                return { mensaje: 'Correo de recuperación enviado. Revisa tu bandeja de entrada.' };
+                const response = await bolsaEmpleoIA.post('/auth/recuperar-password', { email });
+                return response.data;
             },
 
             checkAuth: async () => {

@@ -16,7 +16,6 @@ export interface RutaAprendizajeData {
     tipo: 'ruta_aprendizaje';
     titulo: string;
     nivel_inicio?: string;
-    salario_esperado?: string;
     perfil_actual: {
         nivel_general: string;
         fortalezas_clave: string[];
